@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>살핌 — 이 문서를 읽을 모든 사람의 자리에서</title>
+<meta name="description" content="기관 문서를 내보내기 전, 읽을 사람들의 자리에서 표현을 함께 살펴보는 도구. 문서는 이 컴퓨터 밖으로 나가지 않아요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800;900&family=Nanum+Myeongjo:wght@400;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23FFE375'/%3E%3Ccircle cx='14.5' cy='14.5' r='6.5' fill='none' stroke='%23241F45' stroke-width='2.4'/%3E%3Cpath d='M19.3 19.3l4.4 4.4' stroke='%23241F45' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+<script src="criteria.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script type="module" src="app.js"></script>
+</head>
+<body>
+
+<header class="wrap top" id="hdr">
+  <a class="brand" href="#" data-go="home"><b>살핌</b><span>문서를 읽을 사람들의 자리에서</span></a>
+  <nav class="nav" aria-label="주 메뉴">
+    <button type="button" class="filmbtn" data-film aria-haspopup="dialog"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.6 4.6v4.8l4-2.4z" fill="currentColor"/></svg>소개 영상</button>
+    <button type="button" data-go="standards">살피는 기준</button>
+    <a class="ulink" href="#check" data-go="check">바로 살펴보기 <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12M11 5l5 5-5 5" fill="none" stroke="#241F45" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+  </nav>
+</header>
+
+<main id="home">
+  <section class="wrap hero" aria-labelledby="hero-title">
+    <h1 id="hero-title">이 문서를<br><span class="rollbox" id="heroSeat"></span><br>자리에서 읽는다면</h1>
+    <div class="hero-foot">
+      <p class="serif">같은 문장도 누가 읽느냐에 따라 다르게 닿아요.<br>살핌은 문서를 내보내기 전, 그 자리들을 함께 살펴보는 도구예요.</p>
+      <div class="hero-links">
+        <a class="ulink" href="#check">바로 살펴보기 <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12M11 5l5 5-5 5" fill="none" stroke="#241F45" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        <a class="cue" href="#seats">먼저 자리에 앉아보기 <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3v12M4 10l5 5 5-5" fill="none" stroke="#5A5470" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="seats" aria-labelledby="seats-title">
+    <div class="wrap seats">
+      <div class="sec-head">
+        <h2 id="seats-title">자리에 앉아보기</h2>
+        <p>한 사람을 고르면, 같은 매뉴얼이 그 사람의 눈으로 다시 읽혀요. 가상의 독자예요.</p>
+      </div>
+      <div class="seats-body">
+        <div class="who-list" role="group" aria-label="읽는 사람 고르기" id="whoList"></div>
+        <div class="read" id="readPane" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="why" id="why" aria-labelledby="why-title">
+    <div class="wrap" id="whyInner">
+      <h2 id="why-title" class="h2 wrise">작은 말이, 사람을 그려요</h2>
+      <ol>
+        <li class="wrise d1">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <h3 class="serif"><span style="color:#FFE375">01</span>단어 하나가 시선을 만들어요</h3>
+            <p class="d">‘가출’은 개인의 일탈이라는 선입견을 키운다는 이유로, 법률 용어가 ‘가정 밖 청소년’으로 바뀌었어요.</p>
+            <p class="s">청소년복지 지원법 개정(2021)</p>
+          </div>
+          <div class="stage" aria-hidden="true">
+            <span class="serif w-old">가출 청소년</span>
+            <span class="serif w-new">가정 밖 청소년</span>
+          </div>
+        </li>
+        <li class="wrise d2">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <h3 class="serif"><span style="color:#FFADAD">02</span>분류표 한 칸도 말을 해요</h3>
+            <p class="d">가족 형태, 장애, 성적지향 같은 정체성을 ‘문제’ 유형과 나란히 두면, 의도와 상관없이 차별을 굳히는 효과가 생길 수 있어요.</p>
+            <p class="s">혐오표현 대항 안내서(국가인권위원회) 11쪽</p>
+          </div>
+          <div class="stage" aria-hidden="true">
+            <span style="font-size:13px;font-weight:700;color:#BDB3D6">상담 유형</span>
+            <div class="tbl"><span>학업</span><span>진로</span><span>대인관계</span><span class="cell"><span class="c-old">가정문제(한부모·조손)</span><span class="c-new">가족관계</span></span></div>
+          </div>
+        </li>
+        <li class="wrise d3">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <h3 class="serif"><span style="color:#96F1C6">03</span>익숙한 말일수록 한 번 더</h3>
+            <p class="d">‘장애를 앓다’는 장애를 병처럼 그려요. 국민 10명 중 8명 가까이가 고쳐 써야 한다고 답했어요.</p>
+            <p class="s">개선이 필요한 공공언어 30선(문화체육관광부·국립국어원, 2026)</p>
+          </div>
+          <div class="stage">
+            <p class="big"><b id="pct">0.0</b><span>%</span></p>
+            <div class="bar"><div class="fill"></div></div>
+            <p class="s" style="font-size:14px">‘장애를 앓다’를 고쳐 써야 한다고 답한 비율 (국민 3,000명 조사)</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="wrap check" id="check" aria-labelledby="check-title">
+    <h2 id="check-title">이제, 우리 문서도<br>살펴볼까요?</h2>
+    <div class="check-body">
+      <div class="check-left">
+        <div class="tabs" role="tablist" aria-label="문서 넣는 방법">
+          <button type="button" class="tab" role="tab" aria-selected="true" data-mode="file">파일 올리기</button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-mode="paste">글 붙여넣기</button>
+        </div>
+        <label class="drop" id="drop" for="docFile">
+          <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 21V6M9 12l6-6 6 6" fill="none" stroke="#241F45" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 22v3h20v-3" fill="none" stroke="#241F45" stroke-width="2" stroke-linecap="round"/></svg>
+          <strong id="dropTitle">파일을 여기에 놓거나, 눌러서 골라주세요</strong>
+          <small id="dropSub">PDF · 한글(HWPX) · 워드(DOCX)</small>
+          <input id="docFile" type="file" accept=".pdf,.hwpx,.docx,.hwp,.txt">
+        </label>
+        <div id="pasteBox" class="hidden" style="display:flex;flex-direction:column;gap:8px">
+          <label for="docText" style="font-size:15px;font-weight:500">살펴볼 글</label>
+          <textarea id="docText" placeholder="매뉴얼이나 안내문 내용을 붙여넣어 주세요."></textarea>
+        </div>
+        <p class="err hidden" id="err" role="alert"></p>
+        <p class="lock"><svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true"><rect x="3.5" y="8" width="11" height="8" rx="2" fill="none" stroke="#5A5470" stroke-width="1.6"/><path d="M6 8V5.8a3 3 0 016 0V8" fill="none" stroke="#5A5470" stroke-width="1.6"/></svg>문서는 이 컴퓨터 밖으로 나가지 않아요. 브라우저 안에서 읽고, 어디에도 저장하지 않아요. ‘맥락까지 살펴보기’를 누를 때만 찾은 문장을 AI에게 보내요.</p>
+      </div>
+      <fieldset class="check-right">
+        <legend>누구의 자리에서 살펴볼까요? <span id="selCount"></span></legend>
+        <div class="seatlist" id="seatList"></div>
+        <button type="button" class="primary" id="startBtn">살펴보기 시작 <span aria-hidden="true">→</span></button>
+      </fieldset>
+    </div>
+  </section>
+</main>
+
+<section id="busy" class="wrap busy hidden" aria-live="polite">
+  <h2>문서를 살펴보고 있어요</h2>
+  <p id="busyText">문서를 여는 중…</p>
+  <div class="pbar"><i id="busyBar"></i></div>
+</section>
+
+<section id="results" class="hidden"></section>
+
+<section id="report" class="report hidden"></section>
+
+<section id="standards" class="wrap std hidden" aria-labelledby="std-title"></section>
+
+<footer class="wrap foot" id="foot">
+  <p>국가인권위원회, 국립국어원, 서울시 성평등 언어사전, 장애관련 올바른 용어 가이드라인 등 공식 자료의 판단 원칙 <span data-n="p"></span>개와 표현 기준 <span data-n="t"></span>개로 살펴요.</p>
+  <button type="button" class="ulink" data-go="standards" style="background:none;border-top:0;border-left:0;border-right:0;cursor:pointer;font-size:14px">살피는 기준 전체 보기 →</button>
+  <div class="credit"><b>살핌</b><p>살핌은 <strong>한국청소년활동진흥원 AX 실천공동체</strong>에서 개발하여 모든 공공기관에서 활용토록 보급하는 도구입니다.</p></div>
+</footer>
+
+
+<dialog id="filmDlg" class="filmdlg" aria-label="살핌 소개 영상, 30초">
+  <button type="button" class="filmx" data-filmx aria-label="닫기">닫기 ✕</button>
+  <video controls playsinline preload="none" poster="media/salpim_intro_poster.jpg"><source src="media/salpim_intro.mp4" type="video/mp4"></video>
+</dialog>
+<script>(()=>{const d=document.getElementById("filmDlg"),v=d.querySelector("video");document.addEventListener("click",e=>{if(e.target.closest("[data-film]")){d.showModal();v.play().catch(()=>{});}if(e.target.closest("[data-filmx]")||e.target===d)d.close();});d.addEventListener("close",()=>v.pause());})();</script>
+</body>
+</html>
