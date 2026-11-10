@@ -136,6 +136,7 @@
 <footer class="wrap foot" id="foot">
   <p>국가인권위원회, 국립국어원, 서울시 성평등 언어사전, 장애관련 올바른 용어 가이드라인 등 공식 자료의 판단 원칙 <span data-n="p"></span>개와 표현 기준 <span data-n="t"></span>개로 살펴요.</p>
   <button type="button" class="ulink" data-go="standards" style="background:none;border-top:0;border-left:0;border-right:0;cursor:pointer;font-size:14px">살피는 기준 전체 보기 →</button>
+  <p class="rep-cta">살핌이 잘못 잡았거나 놓친 표현이 있나요? <button type="button" class="ulink" data-report>살핌에 알려주기 →</button></p>
   <div class="credit"><b>살핌</b><p>살핌은 <strong>한국청소년활동진흥원 AX 실천공동체</strong>에서 개발하여 모든 공공기관에서 활용토록 보급하는 도구입니다.</p></div>
 </footer>
 
@@ -145,5 +146,36 @@
   <video controls playsinline preload="none" poster="media/salpim_intro_poster.jpg"><source src="media/salpim_intro.mp4" type="video/mp4"></video>
 </dialog>
 <script>(()=>{const d=document.getElementById("filmDlg"),v=d.querySelector("video");document.addEventListener("click",e=>{if(e.target.closest("[data-film]")){d.showModal();v.play().catch(()=>{});}if(e.target.closest("[data-filmx]")||e.target===d)d.close();});d.addEventListener("close",()=>v.pause());})();</script>
+
+<dialog id="repDlg" class="repdlg" aria-labelledby="repTitle">
+  <form method="dialog" id="repForm" novalidate>
+    <h2 id="repTitle">살핌에 알려주기</h2>
+    <p class="rep-lead">잘못 잡은 표현, 놓친 표현, 기준에 넣었으면 하는 자료를 알려주세요. 보내주신 내용은 살핌을 더 영리하게 만드는 데 써요.</p>
+    <div class="rep-grid">
+      <label>기관명<input name="org" autocomplete="organization"></label>
+      <label>담당자<input name="who" autocomplete="name"></label>
+      <label class="wide">연락처 <span>(이메일 또는 전화, 회신이 필요할 때)</span><input name="contact"></label>
+      <label class="wide">어떤 제보인가요?
+        <select name="kind"><option>잘못 잡았어요 (오탐)</option><option>놓친 표현이 있어요</option><option>기준·자료 제안</option><option>오류·불편</option><option>기타</option></select></label>
+      <label class="wide">제보 내용<textarea name="msg" rows="4" placeholder="예) '고려하여 직원'을 '여직원'으로 잡았어요."></textarea></label>
+      <label class="wide" id="repCtxWrap" hidden>관련 문장 <span>(문서 속 문장이 함께 가요. 민감한 내용은 지워 주세요)</span><textarea name="ctx" rows="3"></textarea></label>
+    </div>
+    <p class="rep-err" id="repErr" hidden>제보 내용을 적어 주세요.</p>
+    <div class="rep-acts">
+      <button type="button" class="ulink" data-repx>닫기</button>
+      <button type="button" class="rep-copy" data-repcopy>내용 복사</button>
+      <button type="button" class="aibtn" data-repsend>메일로 보내기</button>
+    </div>
+    <p class="rep-note">메일 프로그램이 열리면 그대로 보내면 돼요. 열리지 않으면 「내용 복사」 후 <b>sm@kywa.or.kr</b>로 보내 주세요.</p>
+  </form>
+</dialog>
+<script>(()=>{const TO="sm@kywa.or.kr",d=document.getElementById("repDlg"),f=document.getElementById("repForm"),err=document.getElementById("repErr"),cw=document.getElementById("repCtxWrap");
+window.salpimReport=(ctx,kind)=>{f.reset();err.hidden=true;cw.hidden=!ctx;f.ctx.value=ctx||"";if(kind)f.kind.value=kind;d.showModal();setTimeout(()=>f.msg.focus(),50);};
+const body=()=>["[살핌 제보] "+f.kind.value,"","기관명: "+f.org.value,"담당자: "+f.who.value,"연락처: "+f.contact.value,"","제보 내용:",f.msg.value,...(f.ctx.value?["","관련 문장:",f.ctx.value]:[]),"","— 살핌 "+location.host].join("\n");
+const ok=()=>{if(!f.msg.value.trim()){err.hidden=false;f.msg.focus();return false}return true};
+document.addEventListener("click",e=>{const r=e.target.closest("[data-report]");if(r){window.salpimReport(r.dataset.ctx||"",r.dataset.kind||"");}
+if(e.target.closest("[data-repx]")||e.target===d)d.close();
+if(e.target.closest("[data-repsend]")&&ok()){location.href="mailto:"+TO+"?subject="+encodeURIComponent("[살핌 제보] "+f.kind.value+(f.org.value?" · "+f.org.value:""))+"&body="+encodeURIComponent(body());}
+const c=e.target.closest("[data-repcopy]");if(c&&ok()){const t="받는 사람: "+TO+"\n\n"+body();(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>{c.textContent="복사했어요";setTimeout(()=>c.textContent="내용 복사",1600)}).catch(()=>{f.msg.select();});}});})();</script>
 </body>
 </html>

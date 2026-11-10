@@ -232,7 +232,7 @@ function markText(text, marks) {
 // ───────── 맥락 확인 (AI) ─────────
 const AI_LAB = { fix: '고쳐 쓰는 게 좋아요', check: '한 번 더 읽어봐 주세요', ok: '맥락상 괜찮아 보여요' };
 const AI_RANK = { fix: 0, check: 1, none: 2, ok: 3 };
-const PER_TERM = 8;
+const PER_TERM = 5;
 function aiItems() {
   const out = [];
   state.findings.forEach((g, gi) => g.hits.slice(0, PER_TERM).forEach((h, hi) => out.push({
@@ -255,22 +255,24 @@ function aiNote(v) {
 async function runAI() {
   const items = aiItems(); if (!items.length) return;
   Object.assign(state, { aiRun: 'run', aiDone: 0, aiTotal: items.length, aiErr: '' }); keepScroll(renderResults);
-  const chunks = []; for (let i = 0; i < items.length; i += 15) chunks.push(items.slice(i, i + 15));
+  const chunks = []; for (let i = 0; i < items.length; i += 6) chunks.push(items.slice(i, i + 6));
   let k = 0, fail = '';
   const worker = async () => {
     while (k < chunks.length && !fail) {
       const c = chunks[k++];
       try {
-        const r = await fetch('/api/review', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: c }) });
+        const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 45000);
+        const r = await fetch('/api/review', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: c }), signal: ac.signal });
+        clearTimeout(tm);
         if (r.status === 404) { fail = 'nofn'; break; }
         const d = await r.json().catch(() => ({}));
-        if (!r.ok) { fail = d.error === 'no_key' ? 'nokey' : 'api'; break; }
+        if (!r.ok) { fail = d.error === 'no_key' ? 'nokey' : 'api'; state.aiCode = `${r.status}${d.error ? ' · ' + d.error : ''}${d.status ? ' ' + d.status : ''}${d.detail ? ' · ' + d.detail : ''}`; break; }
         d.results.forEach((x) => { state.ai[x.id] = x; });
-      } catch { fail = 'net'; break; }
+      } catch (e) { fail = e.name === 'AbortError' ? 'slow' : 'net'; break; }
       state.aiDone += c.length; keepScroll(renderResults);
     }
   };
-  await Promise.all([worker(), worker(), worker()]);
+  await Promise.all([worker(), worker(), worker(), worker()]);
   state.aiRun = fail ? 'err' : 'done'; state.aiErr = fail; keepScroll(renderResults);
 }
 function aiPanel() {
@@ -280,8 +282,9 @@ function aiPanel() {
     const vs = Object.values(s.ai), n = (v) => vs.filter((x) => x.v === v).length;
     return `<div class="aip done"><p><b>맥락까지 살펴봤어요.</b> 고쳐 쓰면 좋은 곳 ${n('fix')} · 한 번 더 읽어볼 곳 ${n('check')} · 맥락상 괜찮은 곳 ${n('ok')}. 괜찮아 보이는 항목은 아래로 내렸어요.</p><p class="note">AI 판단도 참고 의견이에요. 최종 판단은 읽는 분이 해 주세요.</p></div>`;
   }
-  const err = { nofn: '이 주소에는 맥락 확인 기능이 설치되어 있지 않아요. 배포 안내의 ‘맥락 확인 켜기’를 참고해 주세요.', nokey: '맥락 확인용 API 키가 아직 설정되지 않았어요.', api: 'AI 응답에 문제가 생겼어요. 잠시 뒤 다시 눌러 주세요. 이미 살펴본 문장은 그대로 남아요.', net: '연결이 끊겼어요. 잠시 뒤 다시 눌러 주세요.' }[s.aiErr];
-  return `<div class="aip"><div><p><b>단어만으로는 맥락을 다 알 수 없어요.</b> 찾은 문장만(문서 전체가 아니라) AI에게 보내, 정말 고칠 곳인지 한 번 더 살펴볼 수 있어요.</p>${err ? `<p class="ai-err">${err}</p>` : ''}</div><button type="button" class="aibtn" data-act="ai">맥락까지 살펴보기</button></div>`;
+  const err = { nofn: '이 주소에는 맥락 확인 기능이 설치되어 있지 않아요. 배포 안내의 ‘맥락 확인 켜기’를 참고해 주세요.', nokey: '맥락 확인용 API 키가 아직 설정되지 않았어요.', api: 'AI 응답에 문제가 생겼어요. 잠시 뒤 다시 눌러 주세요. 이미 살펴본 문장은 그대로 남아요.', net: '연결이 끊겼어요. 잠시 뒤 다시 눌러 주세요.', slow: 'AI 응답이 너무 오래 걸려요. 잠시 뒤 다시 눌러 주세요. 이미 살펴본 문장은 그대로 남아요.' }[s.aiErr];
+  const code = s.aiErr === 'api' && s.aiCode ? ` <span class="cnt">(${esc(s.aiCode)})</span>` : '';
+  return `<div class="aip"><div><p><b>단어만으로는 맥락을 다 알 수 없어요.</b> 찾은 문장만(문서 전체가 아니라) AI에게 보내, 정말 고칠 곳인지 한 번 더 살펴볼 수 있어요.</p>${err ? `<p class="ai-err">${err}${code}</p>` : ''}</div><button type="button" class="aibtn" data-act="ai">맥락까지 살펴보기</button></div>`;
 }
 
 function findingHTML(g, idx) {
@@ -307,7 +310,7 @@ function findingHTML(g, idx) {
       ${t.note ? `<p class="note">살펴볼 점 · ${esc(t.note)}</p>` : ''}
     </div>
     <p class="lab">근거</p>
-    <p class="src">${esc(srcName(t.src))} ${esc(t.page)}</p>
+    <p class="src">${esc(srcName(t.src))} ${esc(t.page)} <button type="button" class="rep-mini" data-report data-kind="잘못 잡았어요 (오탐)" data-ctx="${esc(`[${t.term}] ${h.loc} · ${h.before}${h.hit}${h.after}`)}">이 판단이 이상해요</button></p>
     ${aiFirst ? `<p class="lab">맥락</p><div style="display:flex;flex-direction:column;gap:10px">${aiNote(aiFirst)}${aiOthers}</div>` : ''}
   </article>`;
 }
@@ -327,7 +330,7 @@ function readingHTML(x, idx) {
       <p class="ctx serif"><span class="loc">${esc(x.loc)}</span>${body}</p>
     </div>
     <p class="lab">질문</p>
-    <div style="display:flex;flex-direction:column;gap:6px">${qs}</div>
+    <div style="display:flex;flex-direction:column;gap:6px">${qs}<p class="src"><button type="button" class="rep-mini" data-report data-kind="잘못 잡았어요 (오탐)" data-ctx="${esc(`[함께 읽어볼 문장] ${x.loc || ''} · ${x.text ? x.text.before + x.text.hit + x.text.after : x.full}`)}">이 판단이 이상해요</button></p></div>
     ${av ? `<p class="lab">맥락</p>${aiNote(av)}` : ''}
   </article>`;
 }

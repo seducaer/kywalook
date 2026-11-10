@@ -159,6 +159,8 @@ export function analyze(doc, C, seats) {
       let m;
       while ((m = t.re.exec(u.text))) {
         if (!m[0]) { t.re.lastIndex++; continue; }
+        // 앞 단어의 끝 글자에서 시작해 띄어쓰기를 건너뛴 매치는 버림 (예: '고려하여 직원' → '여 직원' 아님)
+        if (/\s/.test(m[0]) && m.index > 0 && /[가-힣]/.test(u.text[m.index - 1])) { t.re.lastIndex = m.index + 1; continue; }
         const tail = u.text.slice(m.index, m.index + 20);
         if (AUTO_KEEP.some((k) => t.term.startsWith(k.id) && k.re.test(tail))) continue;
         if (!groupsMap.has(t.id)) groupsMap.set(t.id, { term: t, hits: [] });
