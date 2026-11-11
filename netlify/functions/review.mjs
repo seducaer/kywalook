@@ -54,9 +54,9 @@ export default async (req) => {
       model: process.env.SALPIM_MODEL || 'claude-sonnet-5-5',
       max_tokens: 4000,
       tools: [TOOL],
-      tool_choice: { type: 'tool', name: 'submit_verdicts' },
+      tool_choice: { type: 'auto' },
       system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: '다음 후보들을 판정해 주세요.\n' + JSON.stringify(clean) }]
+      messages: [{ role: 'user', content: '다음 후보들을 판정한 뒤, 반드시 submit_verdicts 도구를 한 번 호출해 모든 결과를 제출해 주세요. 도구 밖에 다른 말은 쓰지 마세요.\n' + JSON.stringify(clean) }]
     })
   });
   if (!r.ok) { const t = await r.text().catch(() => ''); console.log('anthropic error', r.status, t.slice(0, 500)); let detail = ''; try { detail = JSON.parse(t).error.message.slice(0, 120); } catch {} return json(502, { error: 'api', status: r.status, detail }); }
@@ -65,6 +65,12 @@ export default async (req) => {
   // 도구 호출로 받으므로 JSON 형식이 깨지지 않음
   const use = (data.content || []).find((c) => c.type === 'tool_use');
   let out = use && use.input && Array.isArray(use.input.verdicts) ? use.input.verdicts : null;
+  if (!out) {
+    // 도구를 쓰지 않고 글로 답한 경우: 글 속 JSON 배열을 찾아 봄
+    const raw = (data.content || []).map((c) => c.text || '').join('');
+    const m = raw.match(/\[[\s\S]*\]/);
+    try { const arr = JSON.parse(m ? m[0] : raw); if (Array.isArray(arr)) out = arr; } catch {}
+  }
   if (!out) {
     const text = (data.content || []).map((c) => c.text || '').join('');
     console.log('parse fail', data.stop_reason, text.slice(0, 800));
