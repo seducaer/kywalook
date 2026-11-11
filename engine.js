@@ -84,6 +84,40 @@ export async function readPdf(data, pdfjsLib, opts = {}, onProgress = () => {}) 
   return { units, pages, kind: 'PDF', scanned: chars / Math.max(pages, 1) < 25 };
 }
 
+// 이미지로 된 PDF: 쪽마다 그림으로 그린 뒤 브라우저 안 OCR(Tesseract)로 글자를 읽어냄
+export async function ocrPdf(data, pdfjsLib, Tesseract, opts = {}, onProgress = () => {}, cancelled = () => false) {
+  const task = pdfjsLib.getDocument({ data, cMapUrl: opts.cMapUrl, cMapPacked: true, isEvalSupported: false });
+  const doc = await task.promise;
+  const n = doc.numPages, units = [], texts = new Array(n + 1);
+  const nW = Math.min(opts.workers || 2, n);
+  const workers = [];
+  for (let i = 0; i < nW; i++) workers.push(await Tesseract.createWorker('kor+eng', 1));
+  let next = 1, done = 0;
+  const one = async (w) => {
+    while (next <= n && !cancelled()) {
+      const p = next++;
+      const page = await doc.getPage(p);
+      const vp = page.getViewport({ scale: opts.scale || 2 });
+      const cv = document.createElement('canvas');
+      cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      page.cleanup();
+      const { data: r } = await w.recognize(cv);
+      // 한글 낱글자 사이에 끼어든 공백 정리 (OCR이 자주 만드는 '여 직 원' 같은 띄어쓰기)
+      texts[p] = (r.text || '').replace(/\n(?!\n)/g, ' ').replace(/(?<![^\s])[가-힣](?: [가-힣](?![^\s])){2,}/g, (m) => m.replace(/ /g, ''));
+      cv.width = cv.height = 0;
+      onProgress(++done, n);
+    }
+  };
+  try { await Promise.all(workers.map(one)); }
+  finally { for (const w of workers) { try { await w.terminate(); } catch (e) {} } try { await task.destroy(); } catch (e) {} }
+  if (cancelled()) return null;
+  for (let p = 1; p <= n; p++) for (const s of segment(texts[p] || '')) units.push({ page: p, loc: p + '쪽', text: s });
+  return { units, pages: n, kind: 'PDF', scanned: false, ocr: true };
+}
+
 async function readZipXml(data, JSZip, filter, tokenRe, breakTag) {
   const zip = await JSZip.loadAsync(data);
   const names = Object.keys(zip.files).filter(filter).sort((a, b) => {

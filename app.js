@@ -1,4 +1,5 @@
-import { readPdf, readHwpx, readDocx, readText, analyze } from './engine.js';
+import { buildDocx } from './docx.js';
+import { readPdf, ocrPdf, readHwpx, readDocx, readText, analyze } from './engine.js';
 
 const C = window.SALPIM_CRITERIA;
 const $ = (s, r = document) => r.querySelector(s);
@@ -170,6 +171,26 @@ async function loadPdfjs() {
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
   return pdfjs;
 }
+let ocrCancel = false, tess = null;
+function loadTesseract() {
+  if (tess) return tess;
+  tess = new Promise((ok, no) => {
+    if (window.Tesseract) return ok(window.Tesseract);
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    sc.onload = () => window.Tesseract ? ok(window.Tesseract) : no(new Error('no Tesseract'));
+    sc.onerror = () => { tess = null; no(new Error('load failed')); };
+    document.head.appendChild(sc);
+  });
+  return tess;
+}
+const BUSY_H = '문서를 살펴보고 있어요';
+function busyTitle(h, note) {
+  $('#busy h2').textContent = h || BUSY_H;
+  const el = $('#busyNote'); el.textContent = note || ''; el.hidden = !note;
+  $('#busyCancel').hidden = !h; $('#busyCancel').textContent = '그만두기';
+}
+document.addEventListener('click', (e) => { if (e.target.closest('#busyCancel')) { ocrCancel = true; e.target.textContent = '멈추는 중…'; } });
 const busy = (t, k) => { $('#busyText').textContent = t; $('#busyBar').style.width = Math.round((k || 0) * 100) + '%'; };
 
 let state = null;
@@ -195,14 +216,32 @@ $('#startBtn').addEventListener('click', async () => {
       const buf = new Uint8Array(await file.arrayBuffer());
       if (ext === 'pdf') {
         const lib = await loadPdfjs();
-        doc = await readPdf(buf, lib, { cMapUrl: new URL('./vendor/cmaps/', import.meta.url).href }, (p, n) => busy(`${n}쪽 중 ${p}쪽을 읽는 중…`, p / n));
+        const cMapUrl = new URL('./vendor/cmaps/', import.meta.url).href;
+        doc = await readPdf(buf.slice(), lib, { cMapUrl }, (p, n) => busy(`${n}쪽 중 ${p}쪽을 읽는 중…`, p / n));
+        if (doc.scanned) {
+          busyTitle('이미지로 저장된 PDF예요', '이 PDF는 글자가 아니라 이미지로 저장되어 있어서, 글자로 다시 바꾸면서 살펴보고 있어요. 시간이 조금 걸릴 수 있어요. 글자를 바꾸는 일도 이 컴퓨터 안에서만 해요.');
+          busy('글자 인식 도구를 준비하는 중… (처음 한 번은 1~2분 걸릴 수 있어요)', 0.01);
+          let T;
+          try { T = await loadTesseract(); } catch (e) {
+            busyTitle(); show('home'); $('#check').scrollIntoView();
+            return showErr('이미지 PDF를 글자로 바꾸는 도구를 불러오지 못했어요(인터넷 연결 필요). 한컴·어도비·스캔 앱의 <b>OCR(텍스트 인식)</b>으로 텍스트 PDF를 만든 뒤 다시 올려 주세요.');
+          }
+          ocrCancel = false;
+          const t0 = Date.now();
+          doc = await ocrPdf(buf.slice(), lib, T, { cMapUrl }, (p, n) => {
+            const left = p > 1 ? Math.round((Date.now() - t0) / p * (n - p) / 1000) : null;
+            busy(`${n}쪽 중 ${p}쪽을 글자로 바꿨어요${left != null ? ` · 남은 시간 약 ${left >= 90 ? Math.round(left / 60) + '분' : left + '초'}` : ''}`, p / n);
+          }, () => ocrCancel);
+          busyTitle();
+          if (!doc) { show('home'); $('#check').scrollIntoView(); return; }
+        }
       } else if (ext === 'hwpx') { busy('한글 문서를 읽는 중…', 0.5); doc = await readHwpx(buf, window.JSZip); }
       else if (ext === 'docx') { busy('워드 문서를 읽는 중…', 0.5); doc = await readDocx(buf, window.JSZip); }
       else { doc = readText(new TextDecoder().decode(buf)); }
     }
     if (doc.scanned || !doc.units.length) {
       show('home'); $('#check').scrollIntoView();
-      return showErr('이 파일에서 글자를 읽지 못했어요. 종이를 스캔한 PDF일 수 있어요. 원본 파일(한글·워드)을 올리거나, 내용을 복사해서 <b>글 붙여넣기</b>를 이용해 주세요.');
+      return showErr(doc.ocr ? '이미지 PDF를 글자로 바꿔 봤지만 읽을 수 있는 글자가 거의 없었어요. 원본 파일(한글·워드)을 올리거나, OCR로 텍스트 PDF를 만든 뒤 다시 올려 주세요.' : '이 파일에서 글자를 읽지 못했어요. 원본 파일(한글·워드)을 올리거나, 내용을 복사해서 <b>글 붙여넣기</b>를 이용해 주세요.');
     }
     busy('표현을 살피는 중…', 1);
     const t0 = performance.now();
@@ -352,6 +391,7 @@ function renderResults() {
   const head = nothing
     ? `<h2>살펴볼 표현을 찾지 못했어요</h2><p class="sub">고른 자리에서 기준에 걸리는 표현과 민감한 대상을 다루는 문장이 보이지 않았어요. 다만 살핌은 정해진 기준으로만 살피기 때문에, 표나 분류처럼 맥락으로 생기는 문제는 놓칠 수 있어요. 한 번 더 훑어봐 주세요.</p>`
     : `<h2>${s.findings.length ? `고쳐 쓰면 좋은 표현 ${s.findings.length}가지(${nHits}곳)` : ''}${s.findings.length && s.readings.length ? '와 ' : ''}${s.readings.length ? `함께 읽어볼 문장 ${s.readings.length}개` : ''}를 찾았어요</h2>
+       ${s.doc.ocr ? '<p class="sub ocr-note">이미지로 저장된 PDF라 글자로 바꿔 읽었어요. 글자를 잘못 읽은 곳이 있으면 표현을 놓쳤을 수 있어요.</p>' : ''}
        <p class="sub">살핌은 원문을 바꾸지 않아요. 하나씩 읽어보고, 고칠 곳은 원본 문서에서 직접 고쳐 주세요. 맥락상 그대로 두는 게 맞는 표현도 있어요.</p>`;
   const filters = ['all', ...C.seats.map((x) => x.id).filter((id) => seatsUsed.has(id))];
   const c = counts();
@@ -420,52 +460,74 @@ function keepScroll(fn) { const y = scrollY; fn(); scrollTo(0, y); }
 
 // ───────── 검토 기록 ─────────
 function fmt(d) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}. ${p(d.getMonth() + 1)}. ${p(d.getDate())}. ${p(d.getHours())}:${p(d.getMinutes())}`; }
+const REQ_DEFAULT = '살핌(문서 표현 점검 도구)으로 아래 문서를 살펴본 결과, 고쳐 쓰면 좋은 표현이 확인되어 알려드립니다. 다음 개정(수정) 때 반영을 검토해 주시고, 반영 여부를 표에 적어 회신해 주시기 바랍니다.';
+function reportData() {
+  const s = state, useAI = Object.keys(s.ai).length > 0;
+  const req = s.req || (s.req = { to: '', from: '', due: '', msg: REQ_DEFAULT });
+  const f = s.findings.map((g, gi) => ({ g, gi, st: groupAI(gi).st }));
+  const r = s.readings.map((x, i) => ({ x, i, v: s.ai[`r${i}`] }));
+  return {
+    s, req, useAI,
+    fMain: f.filter((o) => o.st !== 'ok'), fOk: f.filter((o) => o.st === 'ok'),
+    rMain: r.filter((o) => !o.v || o.v.v !== 'ok'), rOk: r.filter((o) => o.v && o.v.v === 'ok'),
+    locs: (g) => g.hits.map((h) => h.loc).filter((v, i, a) => a.indexOf(v) === i).slice(0, 6).join(', ') + (new Set(g.hits.map((h) => h.loc)).size > 6 ? ' 외' : ''),
+    ex: (g) => { const h = g.hits[0]; return (h.before + h.hit + h.after).trim(); },
+    alt: (g) => /^\(/.test(g.term.alt || '') ? (g.term.alt || '').replace(/^\(|\)$/g, '') : (g.term.alt || '-'),
+    rtext: (x) => (x.text ? x.text.before + x.text.hit + x.text.after : x.full).trim(),
+    aiNoteF: (gi) => { const v = state.ai[`f${gi}_0`]; return v ? AI_LAB[v.v] + (v.why ? ' — ' + v.why : '') : ''; },
+  };
+}
 function renderReport() {
-  const s = state;
-  const useAI = Object.keys(s.ai).length > 0;
-  const fRows = s.findings.map((g, gi) => {
-    const ga = groupAI(gi);
-    return `<tr><td>${esc(g.hits[0].hit)}</td><td>${esc(g.hits.map((h) => h.loc).filter((v, i, a) => a.indexOf(v) === i).slice(0, 6).join(', '))}${g.hits.length > 6 ? ' 외' : ''}</td><td>${esc(/^\(/.test(g.term.alt) ? '-' : g.term.alt)}</td><td>${esc(g.term.reason)}</td>${useAI ? `<td>${ga.st === 'none' ? '-' : AI_LAB[ga.st]}</td>` : ''}</tr>`;
-  }).join('');
-  const rRows = s.readings.map((x, i) => {
-    const d = s.rDec[i] || {};
-    return `<tr><td>${esc(x.loc)}</td><td>${esc((x.text ? x.text.before + x.text.hit + x.text.after : x.full).slice(0, 90))}…</td><td>${esc(x.questions.map((q) => q.q).join(' '))}</td>${useAI ? `<td>${s.ai[`r${i}`] ? AI_LAB[s.ai[`r${i}`].v] + (s.ai[`r${i}`].why ? ' — ' + esc(s.ai[`r${i}`].why) : '') : '-'}</td>` : ''}</tr>`;
-  }).join('');
+  const D = reportData(), { s, req, useAI } = D;
+  const fRows = D.fMain.map(({ g, gi }, n) => `<tr><td>${n + 1}</td><td><b>${esc(g.hits[0].hit)}</b><br><span class="mut">${esc(D.locs(g))}</span></td><td>${esc(D.ex(g))}</td><td>${esc(D.alt(g))}</td><td>${esc(g.term.reason)}${useAI && D.aiNoteF(gi) ? `<br><span class="mut">맥락 확인: ${esc(D.aiNoteF(gi))}</span>` : ''}</td><td class="fill"></td><td class="fill"></td></tr>`).join('');
+  const rRows = D.rMain.map(({ x, v }, n) => `<tr><td>${n + 1}</td><td>${esc(x.loc)}</td><td>${esc(D.rtext(x))}</td><td>${esc(x.questions.map((q) => q.q).join(' '))}${v ? `<br><span class="mut">맥락 확인: ${esc(AI_LAB[v.v] + (v.why ? ' — ' + v.why : ''))}</span>` : ''}</td><td class="fill"></td><td class="fill"></td></tr>`).join('');
+  const okList = [...D.fOk.map(({ g }) => `${g.hits[0].hit} (${D.locs(g)})`), ...D.rOk.map(({ x }) => `${x.loc} 문장`)];
   $('#report').innerHTML = `
     <div class="r-acts">
       <button type="button" class="btn" data-ract="back">← 결과로 돌아가기</button>
-      <button type="button" class="btn" aria-pressed="true" data-ract="print">인쇄 · PDF로 저장</button>
+      <button type="button" class="btn" data-ract="print">인쇄 · PDF로 저장</button>
+      <button type="button" class="btn" aria-pressed="true" data-ract="docx">워드(.docx)로 내려받기</button>
     </div>
+    <p class="r-tip">빈칸을 채운 뒤 내려받으세요. 워드 파일은 한글에서 그대로 열리고, 한글에서 <b>다른 이름으로 저장 → HWP</b>로 바꿀 수 있어요.</p>
     <article class="paper">
-      <p style="margin:0 0 4px;font-size:13px;color:#5A5470">살핌 검토 기록</p>
+      <p style="margin:0 0 4px;font-size:13px;color:#5A5470">살핌 검토 결과 · 반영 협조 요청</p>
       <h2>${esc(s.name)}</h2>
-      <h3>개요</h3>
       <table class="kv">
-        <tr><th>살핀 일시</th><td>${fmt(s.at)}</td></tr>
-        <tr><th>문서</th><td>${esc(s.doc.kind)} · ${s.doc.kind === 'PDF' ? s.doc.pages + '쪽' : s.doc.pages + '개 문단'}</td></tr>
-        <tr><th>살핀 자리</th><td>${s.seats.map((id) => esc(seatById[id].label)).join(', ')}</td></tr>
-        <tr><th>적용 기준</th><td>살핌 기준 ${esc(C.version)} · 표현 기준 ${C.termCount}개 · 판단 원칙 ${C.principleCount}개</td></tr>
-        <tr><th><label for="reviewer">검토자</label></th><td><input type="text" id="reviewer" placeholder="부서 · 이름을 적어주세요"></td></tr>
+        <tr><th><label for="rq-to">수신(소관 부서)</label></th><td><input type="text" id="rq-to" data-rq="to" value="${esc(req.to)}" placeholder="예) 청소년활동안전센터"></td></tr>
+        <tr><th><label for="rq-from">요청 부서 · 담당자</label></th><td><input type="text" id="rq-from" data-rq="from" value="${esc(req.from)}" placeholder="예) 기획혁신부 홍길동 (내선 0000)"></td></tr>
+        <tr><th><label for="rq-due">회신 기한</label></th><td><input type="text" id="rq-due" data-rq="due" value="${esc(req.due)}" placeholder="예) 2026. 11. 30.까지"></td></tr>
+        <tr><th>살핀 일시 · 문서</th><td>${fmt(s.at)} · ${esc(s.doc.kind)} ${s.doc.kind === 'PDF' ? s.doc.pages + '쪽' : s.doc.pages + '개 문단'}${s.doc.ocr ? ' (이미지 PDF를 글자로 바꿔 읽음)' : ''}</td></tr>
+        <tr><th>적용 기준</th><td>살핌 기준 ${esc(C.version)} · 표현 기준 ${C.termCount}개 · 판단 원칙 ${C.principleCount}개 · 살핀 자리: ${s.seats.map((id) => esc(seatById[id].label)).join(', ')}</td></tr>
       </table>
-      <h3>결과 요약</h3>
-      <table class="kv">
-        <tr><th>고쳐 쓰면 좋은 표현</th><td>${s.findings.length}가지 (${s.findings.reduce((a, g) => a + g.hits.length, 0)}곳)</td></tr>
-        <tr><th>함께 읽어볼 문장</th><td>${s.readings.length}개</td></tr>
-      </table>
-      ${s.findings.length ? `<h3>고쳐 쓰면 좋은 표현</h3><table><thead><tr><th>표현</th><th>위치</th><th>대안</th><th>살핌</th>${useAI ? '<th>맥락 확인</th>' : ''}</tr></thead><tbody>${fRows}</tbody></table>` : ''}
-      ${s.readings.length ? `<h3>함께 읽어볼 문장</h3><table><thead><tr><th style="width:11%">위치</th><th>문장</th><th style="width:30%">함께 생각해볼 질문</th>${useAI ? '<th style="width:22%">맥락 확인</th>' : ''}</tr></thead><tbody>${rRows}</tbody></table>` : ''}
+      <h3>요청 내용</h3>
+      <textarea id="rq-msg" data-rq="msg" rows="3" class="rq-msg">${esc(req.msg)}</textarea>
+      <h3>1. 고쳐 쓰면 좋은 표현 (${D.fMain.length}가지)</h3>
+      ${D.fMain.length ? `<table class="rq"><thead><tr><th>번호</th><th>표현 · 위치</th><th>예시 문장</th><th>고쳐 쓸 말</th><th>근거</th><th>반영 여부</th><th>비고</th></tr></thead><tbody>${fRows}</tbody></table>` : '<p>없음</p>'}
+      <h3>2. 함께 읽어볼 문장 (${D.rMain.length}개)</h3>
+      ${D.rMain.length ? `<table class="rq"><thead><tr><th>번호</th><th>위치</th><th>문장</th><th>함께 생각해볼 질문</th><th>반영 여부</th><th>비고</th></tr></thead><tbody>${rRows}</tbody></table>` : '<p>없음</p>'}
+      ${okList.length ? `<h3>참고 · 맥락상 괜찮다고 본 항목 (${okList.length})</h3><p class="mut">${esc(okList.join(' · '))}</p>` : ''}
       <h3>안내</h3>
-      <p>살핌은 국가인권위원회, 국립국어원, 서울시 성평등 언어사전 등 공식 자료에 근거한 표현 기준으로 문서를 살피고, 민감한 대상을 다루는 문장을 모아 보여줍니다. 살핌이 찾은 결과는 참고 의견이며 최종 판단은 검토자에게 있습니다. 정해진 기준 밖의 표현이나 맥락에서 생기는 문제는 찾지 못할 수 있습니다.</p>
-      <p>${useAI ? `맥락 확인을 위해, 살핌이 찾은 후보 문장 ${Object.keys(s.ai).length}개만 AI(Anthropic Claude)로 보내 판단을 받았습니다. 문서 전체는 전송되거나 저장되지 않았습니다.` : '이 문서는 검토하는 동안 이용자의 컴퓨터 밖으로 전송되거나 저장되지 않았습니다.'}</p>
+      <p>살핌은 국가인권위원회, 국립국어원, 서울시 성평등 언어사전 등 공식 자료에 근거한 표현 기준으로 문서를 살핍니다. 결과는 참고 의견이며, 법령·사업의 고유 명칭처럼 그대로 두는 것이 맞는 경우도 있으니 소관 부서에서 판단해 주세요.</p>
+      <p>${useAI ? `맥락 확인을 위해 살핌이 찾은 후보 문장 ${Object.keys(s.ai).length}개만 AI(Anthropic Claude)로 보내 판단을 받았습니다. 문서 전체는 전송되거나 저장되지 않았습니다.` : '이 문서는 검토하는 동안 이용자의 컴퓨터 밖으로 전송되거나 저장되지 않았습니다.'}</p>
       <p style="color:#5A5470">살핌 · 한국청소년활동진흥원 AX 실천공동체</p>
     </article>`;
 }
-$('#report').addEventListener('click', (e) => {
+$('#report').addEventListener('click', async (e) => {
   const a = e.target.closest('[data-ract]'); if (!a) return;
   if (a.dataset.ract === 'back') { show('results'); }
   if (a.dataset.ract === 'print') window.print();
+  if (a.dataset.ract === 'docx') {
+    a.disabled = true; const t = a.textContent; a.textContent = '만드는 중…';
+    try {
+      const blob = await buildDocx(reportData(), window.JSZip);
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = `살핌_검토결과_${(state.name || '문서').replace(/\.[^.]+$/, '').slice(0, 40)}.docx`;
+      document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (err) { console.error(err); alert('워드 파일을 만들지 못했어요. 인쇄 · PDF로 저장을 이용해 주세요.'); }
+    a.disabled = false; a.textContent = t;
+  }
 });
-$('#report').addEventListener('input', (e) => { if (e.target.id === 'reviewer') e.target.setAttribute('value', e.target.value); });
+$('#report').addEventListener('input', (e) => { const k = e.target.dataset.rq; if (k && state) { (state.req || (state.req = {}))[k] = e.target.value; } });
 
 // ───────── 살피는 기준 ─────────
 let stdDone = false;
