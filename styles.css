@@ -246,7 +246,7 @@ select,input[type=text]{font:inherit;font-size:15px;min-height:44px;padding:8px 
 .ai{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:8px;border-left:4px solid}
 .ai-fix{background:rgba(255,173,173,.22);border-color:#E57C7C}.ai-check{background:rgba(255,196,140,.22);border-color:#E9A35C}.ai-ok{background:rgba(150,241,198,.22);border-color:#4FC08D}
 .ai-h{margin:0;font-size:14px;font-weight:800}.ai-why{margin:0;font-size:15px;line-height:1.6}.ai-sug{margin:2px 0 0;font-size:16px;line-height:1.7}
-.ai-sug::before{content:'이렇게 써 볼까요 · ';font-family:var(--sans, inherit);font-size:13px;color:var(--muted)}
+.ai-sug::before{content:'고친 문장 예시 · ';font-family:var(--sans, inherit);font-size:13px;color:var(--muted)}
 .more li .ai{margin:8px 0 4px}
 .item.cleared{opacity:.55}.item.cleared:hover{opacity:1}
 @media print{.aip{display:none}}
