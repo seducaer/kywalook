@@ -84,12 +84,35 @@ export async function readPdf(data, pdfjsLib, opts = {}, onProgress = () => {}) 
   return { units, pages, kind: 'PDF', scanned: chars / Math.max(pages, 1) < 25 };
 }
 
+// 흑백으로 바꾸고 명암을 넓힘(어두운 2%→검정, 밝은 2%→흰색). 흐릿한 스캔본의 한글 인식률을 높여 줌
+function stretchContrast(ctx, w, h) {
+  const img = ctx.getImageData(0, 0, w, h), d = img.data, n = w * h;
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < d.length; i += 4) {
+    const g = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8;
+    d[i] = g; hist[g]++;
+  }
+  let lo = 0, hi = 255, acc = 0;
+  while (lo < 255 && (acc += hist[lo]) < n * 0.02) lo++;
+  acc = 0;
+  while (hi > 0 && (acc += hist[hi]) < n * 0.02) hi--;
+  if (hi - lo < 10) { lo = 0; hi = 255; }
+  const k = 255 / (hi - lo);
+  for (let i = 0; i < d.length; i += 4) {
+    const v = Math.max(0, Math.min(255, (d[i] - lo) * k));
+    d[i] = d[i + 1] = d[i + 2] = v;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
 // 이미지로 된 PDF: 쪽마다 그림으로 그린 뒤 브라우저 안 OCR(Tesseract)로 글자를 읽어냄
 export async function ocrPdf(data, pdfjsLib, Tesseract, opts = {}, onProgress = () => {}, cancelled = () => false) {
   const task = pdfjsLib.getDocument({ data, cMapUrl: opts.cMapUrl, cMapPacked: true, isEvalSupported: false });
   const doc = await task.promise;
   const n = doc.numPages, units = [], texts = new Array(n + 1);
-  const nW = Math.min(opts.workers || 2, n);
+  // 컴퓨터 코어 수에 맞춰 2~4쪽을 동시에 읽음
+  const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 4;
+  const nW = Math.max(1, Math.min(opts.workers || Math.max(2, Math.min(4, cores - 1)), n));
   const workers = [];
   for (let i = 0; i < nW; i++) workers.push(await Tesseract.createWorker('kor+eng', 1));
   let next = 1, done = 0;
@@ -97,13 +120,17 @@ export async function ocrPdf(data, pdfjsLib, Tesseract, opts = {}, onProgress = 
     while (next <= n && !cancelled()) {
       const p = next++;
       const page = await doc.getPage(p);
-      const vp = page.getViewport({ scale: opts.scale || 2 });
+      // 화면보다 크게(기본 3배) 그려야 한글 획이 또렷해짐 — 다만 아주 큰 쪽은 긴 변 3500px로 제한
+      const base = page.getViewport({ scale: 1 });
+      const sc = Math.min(opts.scale || 3, 3500 / Math.max(base.width, base.height));
+      const vp = page.getViewport({ scale: sc });
       const cv = document.createElement('canvas');
       cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
       const ctx = cv.getContext('2d');
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
       page.cleanup();
+      stretchContrast(ctx, cv.width, cv.height);
       const { data: r } = await w.recognize(cv);
       // 한글 낱글자 사이에 끼어든 공백 정리 (OCR이 자주 만드는 '여 직 원' 같은 띄어쓰기)
       texts[p] = (r.text || '').replace(/\n(?!\n)/g, ' ').replace(/(?<![^\s])[가-힣](?: [가-힣](?![^\s])){2,}/g, (m) => m.replace(/ /g, ''));
@@ -144,6 +171,11 @@ export async function readHwpx(data, JSZip) {
   const paras = await readZipXml(data, JSZip, (n) => /^Contents\/section\d+\.xml$/i.test(n),
     /<hp:t(?:\s[^>]*)?>([\s\S]*?)<\/hp:t>|<\/hp:p>|<hp:tab\b[^>]*\/>/g, '</hp:p>');
   return toParaUnits(paras, 'HWPX');
+}
+
+export async function readHwp(data) {
+  const { hwpParagraphs } = await import('./hwp.js');
+  return toParaUnits(await hwpParagraphs(data), 'HWP');
 }
 
 export async function readDocx(data, JSZip) {

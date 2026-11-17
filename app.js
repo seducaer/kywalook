@@ -1,5 +1,5 @@
 import { buildDocx } from './docx.js';
-import { readPdf, ocrPdf, readHwpx, readDocx, readText, analyze } from './engine.js';
+import { readPdf, ocrPdf, readHwpx, readHwp, readDocx, readText, analyze } from './engine.js';
 
 const C = window.SALPIM_CRITERIA;
 const $ = (s, r = document) => r.querySelector(s);
@@ -153,7 +153,7 @@ function setFile(f) {
   file = f || null; hideErr();
   $('#dropTitle').textContent = f ? f.name : '파일을 여기에 놓거나, 눌러서 골라주세요';
   $('#dropTitle').classList.toggle('picked', !!f);
-  $('#dropSub').textContent = f ? `${(f.size / 1024 / 1024).toFixed(1)}MB · 다른 파일을 고르려면 다시 눌러주세요` : 'PDF · 한글(HWPX) · 워드(DOCX)';
+  $('#dropSub').textContent = f ? `${(f.size / 1024 / 1024).toFixed(1)}MB · 다른 파일을 고르려면 다시 눌러주세요` : 'PDF · 한글(HWP·HWPX) · 워드(DOCX)';
 }
 $('#docFile').addEventListener('change', (e) => setFile(e.target.files[0]));
 const drop = $('#drop');
@@ -193,6 +193,14 @@ function busyTitle(h, note) {
 document.addEventListener('click', (e) => { if (e.target.closest('#busyCancel')) { ocrCancel = true; e.target.textContent = '멈추는 중…'; } });
 const busy = (t, k) => { $('#busyText').textContent = t; $('#busyBar').style.width = Math.round((k || 0) * 100) + '%'; };
 
+const HWP_TO_HWPX = '한글에서 <b>파일 → 다른 이름으로 저장 → 파일 형식: 한글 표준 문서(*.hwpx)</b>로 저장해서 다시 올려 주세요.';
+const HWP_MSG = {
+  distribution: '배포용으로 잠긴 한글 문서라 글자를 꺼낼 수 없어요. 잠기지 않은 원본 파일을 받아 ' + HWP_TO_HWPX,
+  password: '암호가 걸린 한글 문서예요. 한글에서 암호를 푼 뒤 ' + HWP_TO_HWPX,
+  noinflate: '이 브라우저에서는 예전 한글(HWP) 파일을 풀 수 없어요. 크롬·엣지 최신 버전을 쓰거나, ' + HWP_TO_HWPX,
+  other: '이 한글(HWP) 파일을 읽지 못했어요. 아주 예전 형식이거나 손상되었을 수 있어요. ' + HWP_TO_HWPX
+};
+
 let state = null;
 $('#startBtn').addEventListener('click', async () => {
   hideErr();
@@ -210,8 +218,7 @@ $('#startBtn').addEventListener('click', async () => {
       if (!file) return showErr('살펴볼 파일을 골라주세요.');
       name = file.name;
       const ext = (name.split('.').pop() || '').toLowerCase();
-      if (ext === 'hwp') return showErr('예전 한글 형식(HWP)은 아직 읽지 못해요. 한글에서 <b>다른 이름으로 저장 → HWPX</b>로 저장하거나, 내용을 복사해서 <b>글 붙여넣기</b>를 이용해 주세요.');
-      if (!['pdf', 'hwpx', 'docx', 'txt'].includes(ext)) return showErr('PDF, 한글(HWPX), 워드(DOCX) 파일을 올려주세요.');
+      if (!['pdf', 'hwp', 'hwpx', 'docx', 'txt'].includes(ext)) return showErr('PDF, 한글(HWP·HWPX), 워드(DOCX) 파일을 올려주세요.');
       show('busy'); busy('문서를 여는 중…', 0.02);
       const buf = new Uint8Array(await file.arrayBuffer());
       if (ext === 'pdf') {
@@ -234,6 +241,13 @@ $('#startBtn').addEventListener('click', async () => {
           }, () => ocrCancel);
           busyTitle();
           if (!doc) { show('home'); $('#check').scrollIntoView(); return; }
+        }
+      } else if (ext === 'hwp') {
+        busy('한글 문서를 읽는 중…', 0.5);
+        try { doc = await readHwp(buf); } catch (e) {
+          console.error(e);
+          show('home'); $('#check').scrollIntoView();
+          return showErr(HWP_MSG[e && e.code] || HWP_MSG.other);
         }
       } else if (ext === 'hwpx') { busy('한글 문서를 읽는 중…', 0.5); doc = await readHwpx(buf, window.JSZip); }
       else if (ext === 'docx') { busy('워드 문서를 읽는 중…', 0.5); doc = await readDocx(buf, window.JSZip); }
@@ -391,6 +405,7 @@ function renderResults() {
   const head = nothing
     ? `<h2>살펴볼 표현을 찾지 못했어요</h2><p class="sub">고른 자리에서 기준에 걸리는 표현과 민감한 대상을 다루는 문장이 보이지 않았어요. 다만 살핌은 정해진 기준으로만 살피기 때문에, 표나 분류처럼 맥락으로 생기는 문제는 놓칠 수 있어요. 한 번 더 훑어봐 주세요.</p>`
     : `<h2>${s.findings.length ? `고쳐 쓰면 좋은 표현 ${s.findings.length}가지(${nHits}곳)` : ''}${s.findings.length && s.readings.length ? '와 ' : ''}${s.readings.length ? `함께 읽어볼 문장 ${s.readings.length}개` : ''}를 찾았어요</h2>
+       ${s.doc.kind === 'HWP' ? '<p class="sub ocr-note">예전 한글(HWP) 파일을 바로 읽었어요. 표 안의 글은 칸마다 따로 나뉘어 보일 수 있어요. 한글에서 HWPX로 저장해 올리면 가장 정확해요.</p>' : ''}
        ${s.doc.ocr ? '<p class="sub ocr-note">이미지로 저장된 PDF라 글자로 바꿔 읽었어요. 글자를 잘못 읽은 곳이 있으면 표현을 놓쳤을 수 있어요.</p>' : ''}
        <p class="sub">살핌은 원문을 바꾸지 않아요. 하나씩 읽어보고, 고칠 곳은 원본 문서에서 직접 고쳐 주세요. 맥락상 그대로 두는 게 맞는 표현도 있어요.</p>`;
   const filters = ['all', ...C.seats.map((x) => x.id).filter((id) => seatsUsed.has(id))];
