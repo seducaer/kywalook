@@ -203,6 +203,9 @@ const HWP_MSG = {
 
 let state = null;
 $('#startBtn').addEventListener('click', async () => {
+  // 비밀번호·키가 있어야 살펴보기 (문서를 아직 안 넣었으면 그 안내가 먼저 나오도록 건너뜀)
+  const ready = mode === 'paste' ? $('#docText').value.trim().length >= 10 : !!file;
+  if (ready && window.SALPIM_AUTH && !(await window.SALPIM_AUTH.require())) return;
   hideErr();
   const seats = C.seats.map((s) => s.id).filter((id) => !off.has(id));
   if (!seats.length) return showErr('살펴볼 자리를 하나 이상 골라주세요.');
@@ -451,7 +454,7 @@ $('#results').addEventListener('click', (e) => {
   if (act) {
     if (act.dataset.act === 'again') { show('home'); setTimeout(() => $('#check').scrollIntoView(), 30); }
     if (act.dataset.act === 'report') { renderReport(); show('report'); }
-    if (act.dataset.act === 'ai' && state.aiRun !== 'run') runAI();
+    if (act.dataset.act === 'ai' && state.aiRun !== 'run') (window.SALPIM_AUTH ? window.SALPIM_AUTH.require() : Promise.resolve(true)).then((ok) => { if (ok) runAI(); });
     return;
   }
   const fd = t.closest('[data-fd]');

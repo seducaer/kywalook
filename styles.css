@@ -297,9 +297,11 @@ select,input[type=text]{font:inherit;font-size:15px;min-height:44px;padding:8px 
 
 /* ── 들어가기(v0.6) ── */
 body.locked{overflow:hidden}
-.gate{position:fixed;inset:0;z-index:100;overflow:auto;background:linear-gradient(180deg,#FBEFE1 0%,#F8E7D4 60%,#F5DEC6 100%);display:flex;align-items:flex-start;justify-content:center;padding:clamp(28px,7vh,90px) 20px 40px}
+.gate{position:fixed;inset:0;z-index:100;overflow:auto;background:#FBEFE1;display:flex;align-items:flex-start;justify-content:center;padding:clamp(28px,7vh,90px) 20px 40px}
 .gate[hidden]{display:none}
-.g-box{width:100%;max-width:520px}
+.g-box{width:100%;max-width:520px;position:relative}
+.g-close{position:absolute;right:0;top:0;background:none;border:0;font:inherit;font-size:14px;color:var(--muted);cursor:pointer;padding:8px 0}
+.g-close:hover{color:var(--ink)}
 .g-brand{font-size:44px;font-weight:900;letter-spacing:-.04em;margin:0}
 .g-sub{margin:6px 0 0;color:var(--muted);font-size:16px}
 .g-top{margin:26px 0 0;font-size:15px;line-height:1.7;color:var(--ink)}
