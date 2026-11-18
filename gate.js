@@ -3,16 +3,6 @@
 // 비밀번호·키는 이 코드에 없어요. 서버 함수(/api/review)가 환경변수와 비교해서 맞는지만 알려줘요.
 (function () {
   const K = 'salpim.pass';
-  const APPLY_TO = 'sm@kywa.or.kr';
-  const APPLY_SUBJECT = '[살핌] 활용 신청';
-  const APPLY_BODY = [
-    '살핌 활용을 신청합니다.', '',
-    '기관명: ', '부서: ', '담당자(이름·직위): ', '연락처: ',
-    '활용 목적(살펴볼 문서 종류): ', '',
-    '※ 확인 후 살핌 사용 키를 메일로 보내 드려요.'
-  ].join('\n');
-  const applyHref = 'mailto:' + APPLY_TO + '?subject=' + encodeURIComponent(APPLY_SUBJECT) + '&body=' + encodeURIComponent(APPLY_BODY);
-
   const mem = {};
   const store = {
     get() { try { return sessionStorage.getItem(K) || localStorage.getItem(K) || ''; } catch (e) { return mem[K] || ''; } },
@@ -77,7 +67,6 @@
 
   window.SALPIM_AUTH = {
     headers,
-    applyHref,
     has: () => !!store.get(),
     // 맥락 확인 전에 부름: 이미 있으면 바로, 없으면 창을 띄우고 들어오면 이어서
     async require() {
@@ -98,7 +87,6 @@
   };
 
   document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[data-apply]').forEach((a) => { a.href = applyHref; });
     $('#gFormPass').addEventListener('submit', (e) => { e.preventDefault(); submit(e.target, 'pass'); });
     $('#gFormKey').addEventListener('submit', (e) => { e.preventDefault(); submit(e.target, 'code'); });
     document.addEventListener('click', (e) => {

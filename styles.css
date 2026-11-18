@@ -325,3 +325,12 @@ body.locked{overflow:hidden}
 @media (max-width:520px){.g-row{flex-direction:column}.g-brand{font-size:36px}}
 td,th{word-break:normal;overflow-wrap:anywhere}
 @media (max-width:640px){table.rq{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}}
+.ap-hello{font-size:15px;line-height:1.75}
+.ap-hello p{margin:0 0 10px}
+.ap-box{margin:18px 0 0;padding:16px 18px;border-radius:10px;background:#fff;border:1px solid rgba(36,31,69,.15);display:grid;grid-template-columns:auto 1fr;gap:10px 16px;align-items:center}
+.ap-box dt{font-size:13px;font-weight:700;color:var(--muted)}
+.ap-box dd{margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:15px}
+.ap-box .ap-val{font-weight:700}
+.ap-box .ap-wide{grid-column:1/-1}
+.ap-box textarea{width:100%;font:inherit;font-size:14px;line-height:1.65;padding:10px 12px;border:1px solid rgba(36,31,69,.2);border-radius:8px;background:var(--cream);color:var(--ink);resize:vertical}
+.rep-grid label[hidden]{display:none}

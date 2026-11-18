@@ -45,7 +45,7 @@
       <p class="g-msg" role="alert"></p>
     </form>
 
-    <p class="g-apply">아직 키가 없으신가요? <a href="mailto:sm@kywa.or.kr" data-apply>활용 신청 →</a><br><small style="color:var(--muted)">sm@kywa.or.kr 로 신청 메일이 열려요. 확인 후 사용 키를 보내 드려요.</small></p>
+    <p class="g-apply">아직 키가 없으신가요? <a href="#apply" data-apply>활용 신청 →</a><br><small style="color:var(--muted)">신청 메일을 보내 주시면 1일 이내에 사용 키를 보내 드려요.</small></p>
   </div>
 </div>
 
@@ -174,7 +174,7 @@
   <button type="button" class="ulink" data-go="standards" style="background:none;border-top:0;border-left:0;border-right:0;cursor:pointer;font-size:14px">살피는 기준 전체 보기 →</button>
   <p class="rep-cta">살핌이 잘못 잡았거나 놓친 표현이 있나요? <button type="button" class="ulink" data-report>살핌에 알려주기 →</button></p>
   <div class="credit"><b>살핌</b><p>살핌은 <strong>한국청소년활동진흥원 AX 실천공동체</strong>에서 개발하여 모든 공공기관에서 활용토록 보급하는 도구입니다.</p>
-    <div class="foot-links"><a class="ulink" href="mailto:sm@kywa.or.kr" data-apply>활용 신청 →</a><button type="button" class="linkbtn" data-logout hidden>저장된 비밀번호·키 지우기</button></div></div>
+    <div class="foot-links"><a class="ulink" href="#apply" data-apply>활용 신청 →</a><button type="button" class="linkbtn" data-logout hidden>저장된 비밀번호·키 지우기</button></div></div>
 </footer>
 
 
@@ -184,6 +184,40 @@
 </dialog>
 <script>(()=>{const d=document.getElementById("filmDlg"),v=d.querySelector("video");document.addEventListener("click",e=>{if(e.target.closest("[data-film]")){d.showModal();v.play().catch(()=>{});}if(e.target.closest("[data-filmx]")||e.target===d)d.close();});d.addEventListener("close",()=>v.pause());})();</script>
 
+<dialog id="applyDlg" class="repdlg" aria-labelledby="applyTitle">
+  <h2 id="applyTitle">살핌 활용 신청</h2>
+  <div class="ap-hello">
+    <p>안녕하세요.<br>살핌에 관심을 갖고 살펴봐 주셔서 감사합니다.</p>
+    <p>활용을 원하시면 아래 내용을 담아 <b>sm@kywa.or.kr</b>로 활용 신청 메일을 보내 주세요.<br>메일을 받은 뒤 <b>1일 이내</b>에 바로 쓰실 수 있도록 도와드릴게요.</p>
+    <p>감사합니다.</p>
+  </div>
+  <dl class="ap-box">
+    <dt>받는 사람</dt>
+    <dd><span class="ap-val">sm@kywa.or.kr</span><button type="button" class="rep-mini" data-apcopy="to">주소 복사</button></dd>
+    <dt>메일 제목</dt>
+    <dd><span class="ap-val">[살핌] 활용 신청</span><button type="button" class="rep-mini" data-apcopy="subj">제목 복사</button></dd>
+    <dt>보낼 내용</dt>
+    <dd class="ap-wide"><textarea id="apBody" rows="7" readonly>살핌 활용을 신청합니다.
+
+기관명:
+부서:
+담당자(이름·직위):
+연락처(이메일·전화):
+활용 목적(살펴볼 문서 종류):</textarea></dd>
+  </dl>
+  <div class="rep-acts">
+    <button type="button" class="ulink" data-apx>닫기</button>
+    <button type="button" class="aibtn" data-apcopy="body">내용 복사</button>
+  </div>
+  <p class="rep-note">기관 메일(업무 메일)에서 새 메일을 쓰고, 복사한 주소·제목·내용을 붙여 넣어 보내 주세요.</p>
+</dialog>
+<script>(()=>{const d=document.getElementById("applyDlg"),V={to:"sm@kywa.or.kr",subj:"[살핌] 활용 신청"};
+const copy=(t,b)=>{const done=()=>{const o=b.textContent;b.textContent="복사했어요";setTimeout(()=>b.textContent=o,1600)};
+const fb=()=>{const ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";d.appendChild(ta);ta.select();try{document.execCommand("copy");done()}catch(e){}ta.remove()};
+navigator.clipboard&&window.isSecureContext?navigator.clipboard.writeText(t).then(done,fb):fb()};
+document.addEventListener("click",e=>{const a=e.target.closest("[data-apply]");if(a){e.preventDefault();d.showModal();return}
+if(e.target.closest("[data-apx]")||e.target===d){d.close();return}
+const c=e.target.closest("[data-apcopy]");if(c){const k=c.dataset.apcopy;copy(k==="body"?document.getElementById("apBody").value:V[k],c)}});})();</script>
 <dialog id="repDlg" class="repdlg" aria-labelledby="repTitle">
   <form method="dialog" id="repForm" novalidate>
     <h2 id="repTitle">살핌에 알려주기</h2>
@@ -198,21 +232,30 @@
       <label class="wide" id="repCtxWrap" hidden>관련 문장 <span>(문서 속 문장이 함께 가요. 민감한 내용은 지워 주세요)</span><textarea name="ctx" rows="3"></textarea></label>
     </div>
     <p class="rep-err" id="repErr" hidden>제보 내용을 적어 주세요.</p>
+    <dl class="ap-box">
+      <dt>받는 사람</dt>
+      <dd><span class="ap-val">sm@kywa.or.kr</span><button type="button" class="rep-mini" data-repcopy="to">주소 복사</button></dd>
+      <dt>메일 제목</dt>
+      <dd><span class="ap-val" id="repSubj">[살핌 제보]</span><button type="button" class="rep-mini" data-repcopy="subj">제목 복사</button></dd>
+    </dl>
     <div class="rep-acts">
       <button type="button" class="ulink" data-repx>닫기</button>
-      <button type="button" class="rep-copy" data-repcopy>내용 복사</button>
-      <button type="button" class="aibtn" data-repsend>메일로 보내기</button>
+      <button type="button" class="aibtn" data-repcopy="body">내용 복사</button>
     </div>
-    <p class="rep-note">메일 프로그램이 열리면 그대로 보내면 돼요. 열리지 않으면 「내용 복사」 후 <b>sm@kywa.or.kr</b>로 보내 주세요.</p>
+    <p class="rep-note">위 칸을 채운 뒤 「내용 복사」를 누르고, 기관 메일(업무 메일)에서 새 메일을 써서 주소·제목·내용을 붙여 넣어 보내 주세요.</p>
   </form>
 </dialog>
-<script>(()=>{const TO="sm@kywa.or.kr",d=document.getElementById("repDlg"),f=document.getElementById("repForm"),err=document.getElementById("repErr"),cw=document.getElementById("repCtxWrap");
-window.salpimReport=(ctx,kind)=>{f.reset();err.hidden=true;cw.hidden=!ctx;f.ctx.value=ctx||"";if(kind)f.kind.value=kind;d.showModal();setTimeout(()=>f.msg.focus(),50);};
+<script>(()=>{const TO="sm@kywa.or.kr",d=document.getElementById("repDlg"),f=document.getElementById("repForm"),err=document.getElementById("repErr"),cw=document.getElementById("repCtxWrap"),sj=document.getElementById("repSubj");
+const subj=()=>"[살핌 제보] "+f.kind.value+(f.org.value.trim()?" · "+f.org.value.trim():"");const upd=()=>{sj.textContent=subj()};
+window.salpimReport=(ctx,kind)=>{f.reset();err.hidden=true;cw.hidden=!ctx;f.ctx.value=ctx||"";if(kind)f.kind.value=kind;upd();d.showModal();setTimeout(()=>f.msg.focus(),50);};
+f.addEventListener("input",upd);f.addEventListener("change",upd);
 const body=()=>["[살핌 제보] "+f.kind.value,"","기관명: "+f.org.value,"담당자: "+f.who.value,"연락처: "+f.contact.value,"","제보 내용:",f.msg.value,...(f.ctx.value?["","관련 문장:",f.ctx.value]:[]),"","— 살핌 "+location.host].join("\n");
-const ok=()=>{if(!f.msg.value.trim()){err.hidden=false;f.msg.focus();return false}return true};
+const ok=()=>{if(!f.msg.value.trim()){err.hidden=false;f.msg.focus();return false}err.hidden=true;return true};
+const copy=(t,b)=>{const done=()=>{const o=b.textContent;b.textContent="복사했어요";setTimeout(()=>b.textContent=o,1600)};
+const fb=()=>{const ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";d.appendChild(ta);ta.select();try{document.execCommand("copy");done()}catch(e){}ta.remove()};
+navigator.clipboard&&window.isSecureContext?navigator.clipboard.writeText(t).then(done,fb):fb()};
 document.addEventListener("click",e=>{const r=e.target.closest("[data-report]");if(r){window.salpimReport(r.dataset.ctx||"",r.dataset.kind||"");}
 if(e.target.closest("[data-repx]")||e.target===d)d.close();
-if(e.target.closest("[data-repsend]")&&ok()){location.href="mailto:"+TO+"?subject="+encodeURIComponent("[살핌 제보] "+f.kind.value+(f.org.value?" · "+f.org.value:""))+"&body="+encodeURIComponent(body());}
-const c=e.target.closest("[data-repcopy]");if(c&&ok()){const t="받는 사람: "+TO+"\n\n"+body();(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>{c.textContent="복사했어요";setTimeout(()=>c.textContent="내용 복사",1600)}).catch(()=>{f.msg.select();});}});})();</script>
+const c=e.target.closest("[data-repcopy]");if(c){const k=c.dataset.repcopy;if(k==="to")copy(TO,c);else if(k==="subj")copy(subj(),c);else if(ok())copy(body(),c);}});})();</script>
 </body>
 </html>
