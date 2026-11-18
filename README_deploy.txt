@@ -26,6 +26,7 @@
    - Build command: 비워두기 / Publish directory: 비워두기(또는 .) → Deploy
 6. 사이트 화면 > Project configuration > Environment variables > Add a variable
    - ANTHROPIC_API_KEY = 발급받은 키
+   - SALPIM_PASS = 기관 비밀번호 (진흥원 직원이 들어갈 때 쓰는 번호, 사이트 코드에는 들어가지 않음)
    - (선택) SALPIM_MODEL = claude-sonnet-5-5  (비용을 더 줄이려면 claude-haiku-5-5)
 7. Deploys 메뉴 > Trigger deploy > Deploy project  (키를 반영하려면 한 번 더 배포)
 8. Site configuration > Change site name 에서 주소를 salpim-kywa 등으로 변경
@@ -60,3 +61,17 @@
   · 크롬·엣지 최신 버전 필요 (브라우저 내장 압축 풀기 기능 사용)
 - 이미지 PDF 글자 인식 개선: 3배 크게 그린 뒤 흑백·명암 보정, 컴퓨터 코어 수에 맞춰 2~4쪽 동시 처리
 - 업데이트: salpim 폴더 내용물 전체를 GitHub에 다시 올리면 됨 (hwp.js가 새로 추가됨, 43개 파일)
+
+━━ v0.6 추가 (2026.11.18 오전) ━━
+- 들어가기 화면: 처음 들어오면 ① 기관 비밀번호(진흥원) 또는 ② 기관의 Anthropic API 키(다른 기관) 중 하나로 들어감
+  · 비밀번호는 Netlify 환경변수 SALPIM_PASS 에만 있고, 서버 함수가 맞는지만 확인함
+  · 다른 기관 키는 그 사람 브라우저에만 저장되고, 맥락 확인 요청 때 서버 함수를 거쳐 그 키로 AI를 부름(서버에 저장 안 함)
+  · SALPIM_PASS 를 설정하지 않으면 비밀번호로는 아무도 못 들어감(안전하게 닫힘)
+- 「활용 신청」: 들어가기 화면과 맨 아래에 있음 → sm@kywa.or.kr 로 신청 메일 양식이 열림
+- 맨 아래 「이 컴퓨터에서 나가기」: 저장된 비밀번호·키를 지움
+- 한글 줄바꿈을 낱말 단위로(도/구입니다 → 도구입니다), 휴대폰에서 표가 화면 밖으로 넘치던 문제 정리
+- HWP 압축 해제 자체 구현(크롬 내장 기능이 일부 한글 파일에서 실패하던 문제)
+
+[배포 순서 — 한 번에 끝내기]
+1. Netlify > Project configuration > Environment variables 에 SALPIM_PASS 를 먼저 추가
+2. 그다음 GitHub에 salpim 폴더 내용물 전체를 올림 → 이 업로드로 한 번만 배포됨

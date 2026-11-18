@@ -247,7 +247,7 @@ $('#startBtn').addEventListener('click', async () => {
         try { doc = await readHwp(buf); } catch (e) {
           console.error(e);
           show('home'); $('#check').scrollIntoView();
-          return showErr(HWP_MSG[e && e.code] || HWP_MSG.other);
+          return showErr((HWP_MSG[e && e.code] || HWP_MSG.other) + `<br><small style="opacity:.6">살핌 v0.6 · 확인용 정보: ${esc(String((e && (e.code || e.name)) || '') + ' ' + String((e && e.message) || '')).slice(0, 120)}</small>`);
         }
       } else if (ext === 'hwpx') { busy('한글 문서를 읽는 중…', 0.5); doc = await readHwpx(buf, window.JSZip); }
       else if (ext === 'docx') { busy('워드 문서를 읽는 중…', 0.5); doc = await readDocx(buf, window.JSZip); }
@@ -315,9 +315,10 @@ async function runAI() {
       const c = chunks[k++];
       try {
         const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 45000);
-        const r = await fetch('/api/review', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: c }), signal: ac.signal });
+        const r = await fetch('/api/review', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, window.SALPIM_AUTH ? window.SALPIM_AUTH.headers() : {}), body: JSON.stringify({ items: c }), signal: ac.signal });
         clearTimeout(tm);
         if (r.status === 404) { fail = 'nofn'; break; }
+        if (r.status === 401) { fail = 'auth'; break; }
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { fail = d.error === 'no_key' ? 'nokey' : 'api'; state.aiCode = `${r.status}${d.error ? ' · ' + d.error : ''}${d.status ? ' ' + d.status : ''}${d.detail ? ' · ' + d.detail : ''}`; break; }
         d.results.forEach((x) => { state.ai[x.id] = x; });
@@ -327,6 +328,7 @@ async function runAI() {
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
   state.aiRun = fail ? 'err' : 'done'; state.aiErr = fail; keepScroll(renderResults);
+  if (fail === 'auth' && window.SALPIM_AUTH) window.SALPIM_AUTH.expire();
 }
 function aiPanel() {
   const s = state;
@@ -335,7 +337,7 @@ function aiPanel() {
     const vs = Object.values(s.ai), n = (v) => vs.filter((x) => x.v === v).length;
     return `<div class="aip done"><p><b>맥락까지 살펴봤어요.</b> 고쳐 쓰면 좋은 곳 ${n('fix')} · 한 번 더 읽어볼 곳 ${n('check')} · 맥락상 괜찮은 곳 ${n('ok')}. 괜찮아 보이는 항목은 아래로 내렸어요.</p><p class="note">AI 판단도 참고 의견이에요. 최종 판단은 읽는 분이 해 주세요.</p></div>`;
   }
-  const err = { nofn: '이 주소에는 맥락 확인 기능이 설치되어 있지 않아요. 배포 안내의 ‘맥락 확인 켜기’를 참고해 주세요.', nokey: '맥락 확인용 API 키가 아직 설정되지 않았어요.', api: 'AI 응답에 문제가 생겼어요. 잠시 뒤 다시 눌러 주세요. 이미 살펴본 문장은 그대로 남아요.', net: '연결이 끊겼어요. 잠시 뒤 다시 눌러 주세요.', slow: 'AI 응답이 너무 오래 걸려요. 잠시 뒤 다시 눌러 주세요. 이미 살펴본 문장은 그대로 남아요.' }[s.aiErr];
+  const err = { nofn: '이 주소에는 맥락 확인 기능이 설치되어 있지 않아요. 배포 안내의 ‘맥락 확인 켜기’를 참고해 주세요.', nokey: '맥락 확인용 API 키가 아직 설정되지 않았어요.', api: 'AI 응답에 문제가 생겼어요. 잠시 뒤 다시 눌러 주세요. 이미 살펴본 문장은 그대로 남아요.', net: '연결이 끊겼어요. 잠시 뒤 다시 눌러 주세요.', auth: '들어가기 정보가 바뀌었어요. 다시 들어간 뒤 눌러 주세요. 이미 살펴본 문장은 그대로 남아요.', slow: 'AI 응답이 너무 오래 걸려요. 잠시 뒤 다시 눌러 주세요. 이미 살펴본 문장은 그대로 남아요.' }[s.aiErr];
   const code = s.aiErr === 'api' && s.aiCode ? ` <span class="cnt">(${esc(s.aiCode)})</span>` : '';
   return `<div class="aip"><div><p><b>단어만으로는 맥락을 다 알 수 없어요.</b> 찾은 문장만(문서 전체가 아니라) AI에게 보내, 정말 고칠 곳인지 한 번 더 살펴볼 수 있어요.</p>${err ? `<p class="ai-err">${err}${code}</p>` : ''}</div><button type="button" class="aibtn" data-act="ai">맥락까지 살펴보기</button></div>`;
 }
