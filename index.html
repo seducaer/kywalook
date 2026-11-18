@@ -136,8 +136,8 @@
         <label class="drop" id="drop" for="docFile">
           <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 21V6M9 12l6-6 6 6" fill="none" stroke="#241F45" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 22v3h20v-3" fill="none" stroke="#241F45" stroke-width="2" stroke-linecap="round"/></svg>
           <strong id="dropTitle">파일을 여기에 놓거나, 눌러서 골라주세요</strong>
-          <small id="dropSub">PDF · 한글(HWP·HWPX) · 워드(DOCX)</small>
-          <input id="docFile" type="file" accept=".pdf,.hwpx,.docx,.hwp,.txt">
+          <small id="dropSub">PDF · 한글(HWP·HWPX) · 워드(DOCX) · 여러 개를 한 번에 골라도 돼요</small>
+          <input id="docFile" type="file" accept=".pdf,.hwpx,.docx,.hwp,.txt" multiple>
         </label>
         <div id="pasteBox" class="hidden" style="display:flex;flex-direction:column;gap:8px">
           <label for="docText" style="font-size:15px;font-weight:500">살펴볼 글</label>
@@ -150,6 +150,7 @@
         <legend>누구의 자리에서 살펴볼까요? <span id="selCount"></span></legend>
         <div class="seatlist" id="seatList"></div>
         <button type="button" class="primary" id="startBtn">살펴보기 시작 <span aria-hidden="true">→</span></button>
+        <p class="bagbar" id="bagBar" hidden></p>
       </fieldset>
     </div>
   </section>
@@ -166,6 +167,8 @@
 <section id="results" class="hidden"></section>
 
 <section id="report" class="report hidden"></section>
+
+<section id="bag" class="hidden"></section>
 
 <section id="standards" class="wrap std hidden" aria-labelledby="std-title"></section>
 

@@ -334,3 +334,21 @@ td,th{word-break:normal;overflow-wrap:anywhere}
 .ap-box .ap-wide{grid-column:1/-1}
 .ap-box textarea{width:100%;font:inherit;font-size:14px;line-height:1.65;padding:10px 12px;border:1px solid rgba(36,31,69,.2);border-radius:8px;background:var(--cream);color:var(--ink);resize:vertical}
 .rep-grid label[hidden]{display:none}
+
+/* ── 전수조사 모음 (v0.7) ── */
+.bagbar{margin:14px 0 0;font-size:14px;line-height:1.7;color:var(--muted)}
+.bagbar b{color:var(--ink)}
+.bagbar .ulink{background:none;border-top:0;border-left:0;border-right:0;cursor:pointer;font:inherit;font-weight:700;color:var(--ink);padding:2px 0!important;margin-left:4px}
+.bag{padding-bottom:64px}
+.bag .note{margin:0;font-size:14px;color:var(--muted)}
+.bag .ok-note{display:inline-block;align-self:flex-start;padding:6px 12px;border-radius:8px;background:rgba(150,241,198,.45);font-size:15px!important}
+.bag-acts{justify-content:flex-start;margin:0;max-width:none}
+.bag-t{width:100%;border-collapse:collapse;background:rgba(255,253,249,.7);font-size:14px}
+.bag-t th,.bag-t td{border:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+.bag-t th{background:#EFE6DA;font-weight:700;white-space:nowrap}
+.bag-t td:nth-child(1){width:48px;text-align:center}
+.bag-t .mut{color:var(--muted);font-size:12.5px}
+.bag-t tr.fail td{color:var(--muted)}
+.bag-t .rep-mini{margin-left:0}
+@media (max-width:640px){.bag-t{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}}
+.bag-t .rep-mini+.rep-mini{margin-left:12px}

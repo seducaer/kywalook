@@ -1,4 +1,5 @@
 import { buildDocx } from './docx.js';
+import { buildXlsx, REFLECT } from './sheet.js';
 import { readPdf, ocrPdf, readHwpx, readHwp, readDocx, readText, analyze } from './engine.js';
 
 const C = window.SALPIM_CRITERIA;
@@ -14,7 +15,7 @@ $$('[data-n="p"]').forEach((e) => (e.textContent = C.principleCount));
 $$('[data-n="t"]').forEach((e) => (e.textContent = C.termCount));
 
 // ───────── 화면 전환 ─────────
-const views = ['home', 'busy', 'results', 'report', 'standards'];
+const views = ['home', 'busy', 'results', 'report', 'standards', 'bag'];
 function show(id) {
   views.forEach((v) => $('#' + v).classList.toggle('hidden', v !== id));
   $('#foot').classList.toggle('hidden', id === 'busy' || id === 'report');
@@ -26,6 +27,7 @@ document.addEventListener('click', (e) => {
   const to = g.dataset.go;
   if (to === 'home') { e.preventDefault(); show('home'); }
   if (to === 'standards') { e.preventDefault(); renderStandards(); show('standards'); }
+  if (to === 'bag') { e.preventDefault(); bagNote = ''; renderBag(); show('bag'); }
   if (to === 'check') {
     if ($('#home').classList.contains('hidden')) { e.preventDefault(); show('home'); setTimeout(() => $('#check').scrollIntoView(), 30); }
   }
@@ -130,7 +132,7 @@ play(0);
 })();
 
 // ───────── 문서 넣기 ─────────
-let mode = 'file', file = null;
+let mode = 'file', files = [];
 const off = new Set();
 function renderSeats() {
   $('#seatList').innerHTML = C.seats.map((s) => `
@@ -149,17 +151,20 @@ $$('.tab').forEach((t) => t.addEventListener('click', () => {
   $('#pasteBox').classList.toggle('hidden', mode !== 'paste');
   hideErr();
 }));
-function setFile(f) {
-  file = f || null; hideErr();
-  $('#dropTitle').textContent = f ? f.name : '파일을 여기에 놓거나, 눌러서 골라주세요';
-  $('#dropTitle').classList.toggle('picked', !!f);
-  $('#dropSub').textContent = f ? `${(f.size / 1024 / 1024).toFixed(1)}MB · 다른 파일을 고르려면 다시 눌러주세요` : 'PDF · 한글(HWP·HWPX) · 워드(DOCX)';
+function setFiles(list) {
+  files = [...(list || [])]; hideErr();
+  const n = files.length, f = files[0];
+  $('#dropTitle').textContent = !n ? '파일을 여기에 놓거나, 눌러서 골라주세요' : n === 1 ? f.name : `${f.name} 외 ${n - 1}개`;
+  $('#dropTitle').classList.toggle('picked', !!n);
+  const mb = (files.reduce((a, x) => a + x.size, 0) / 1024 / 1024).toFixed(1);
+  $('#dropSub').textContent = !n ? 'PDF · 한글(HWP·HWPX) · 워드(DOCX) · 여러 개를 한 번에 골라도 돼요'
+    : n === 1 ? `${mb}MB · 다른 파일을 고르려면 다시 눌러주세요` : `${n}개 · ${mb}MB · 한 번에 살펴보고 결과를 모음에 담아요`;
 }
-$('#docFile').addEventListener('change', (e) => setFile(e.target.files[0]));
+$('#docFile').addEventListener('change', (e) => setFiles(e.target.files));
 const drop = $('#drop');
 ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
-drop.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) setFile(f); });
+drop.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) setFiles(e.dataTransfer.files); });
 
 function showErr(msg) { const el = $('#err'); el.innerHTML = msg; el.classList.remove('hidden'); }
 function hideErr() { $('#err').classList.add('hidden'); }
@@ -202,13 +207,66 @@ const HWP_MSG = {
 };
 
 let state = null;
+const EXTS = ['pdf', 'hwp', 'hwpx', 'docx', 'txt'];
+const extOf = (n) => (n.split('.').pop() || '').toLowerCase();
+const failMsg = (msg, code) => Object.assign(new Error(msg), { userMsg: msg, code });
+const NO_TEXT = '이 파일에서 글자를 읽지 못했어요. 원본 파일(한글·워드)을 올리거나, 내용을 복사해서 <b>글 붙여넣기</b>를 이용해 주세요.';
+
+// 파일 하나를 읽어 doc으로. batch이면 이미지 PDF는 글자 인식 없이 건너뜀(시간이 오래 걸려서).
+async function readFileDoc(f, { batch = false, prog = busy } = {}) {
+  const ext = extOf(f.name);
+  if (!EXTS.includes(ext)) throw failMsg('PDF, 한글(HWP·HWPX), 워드(DOCX) 파일이 아니에요.', 'type');
+  const buf = new Uint8Array(await f.arrayBuffer());
+  let doc;
+  if (ext === 'pdf') {
+    const lib = await loadPdfjs();
+    const cMapUrl = new URL('./vendor/cmaps/', import.meta.url).href;
+    doc = await readPdf(buf.slice(), lib, { cMapUrl }, (p, n) => prog(`${n}쪽 중 ${p}쪽을 읽는 중…`, p / n));
+    if (doc.scanned) {
+      if (batch) throw failMsg('이미지로 저장된 PDF예요. 한 개만 따로 올리면 글자로 바꿔 살펴볼 수 있어요.', 'scanned');
+      busyTitle('이미지로 저장된 PDF예요', '이 PDF는 글자가 아니라 이미지로 저장되어 있어서, 글자로 다시 바꾸면서 살펴보고 있어요. 시간이 조금 걸릴 수 있어요. 글자를 바꾸는 일도 이 컴퓨터 안에서만 해요.');
+      busy('글자 인식 도구를 준비하는 중… (처음 한 번은 1~2분 걸릴 수 있어요)', 0.01);
+      let T;
+      try { T = await loadTesseract(); } catch (e) {
+        throw failMsg('이미지 PDF를 글자로 바꾸는 도구를 불러오지 못했어요(인터넷 연결 필요). 한컴·어도비·스캔 앱의 <b>OCR(텍스트 인식)</b>으로 텍스트 PDF를 만든 뒤 다시 올려 주세요.', 'ocr');
+      }
+      ocrCancel = false;
+      const t0 = Date.now();
+      doc = await ocrPdf(buf.slice(), lib, T, { cMapUrl }, (p, n) => {
+        const left = p > 1 ? Math.round((Date.now() - t0) / p * (n - p) / 1000) : null;
+        busy(`${n}쪽 중 ${p}쪽을 글자로 바꿨어요${left != null ? ` · 남은 시간 약 ${left >= 90 ? Math.round(left / 60) + '분' : left + '초'}` : ''}`, p / n);
+      }, () => ocrCancel);
+      busyTitle();
+      if (!doc) throw failMsg('', 'cancel');
+    }
+  } else if (ext === 'hwp') {
+    prog('한글 문서를 읽는 중…', 0.5);
+    try { doc = await readHwp(buf); } catch (e) {
+      console.error(e);
+      throw failMsg((HWP_MSG[e && e.code] || HWP_MSG.other) + `<br><small style="opacity:.6">살핌 v0.7 · 확인용 정보: ${esc(String((e && (e.code || e.name)) || '') + ' ' + String((e && e.message) || '')).slice(0, 120)}</small>`, 'hwp');
+    }
+  } else if (ext === 'hwpx') { prog('한글 문서를 읽는 중…', 0.5); doc = await readHwpx(buf, window.JSZip); }
+  else if (ext === 'docx') { prog('워드 문서를 읽는 중…', 0.5); doc = await readDocx(buf, window.JSZip); }
+  else { doc = readText(new TextDecoder().decode(buf)); }
+  if (doc.scanned || !doc.units.length) throw failMsg(doc.ocr ? '이미지 PDF를 글자로 바꿔 봤지만 읽을 수 있는 글자가 거의 없었어요. 원본 파일(한글·워드)을 올리거나, OCR로 텍스트 PDF를 만든 뒤 다시 올려 주세요.' : NO_TEXT, 'empty');
+  return doc;
+}
+function makeState(name, doc, seats) {
+  const t0 = performance.now();
+  const r = analyze(doc, C, seats);
+  return { name, doc, seats, at: new Date(), ms: Math.round(performance.now() - t0), findings: r.findings, readings: r.readings,
+    fDec: {}, rDec: {}, ai: {}, aiRun: 'idle', aiDone: 0, aiTotal: 0, aiErr: '', tab: r.findings.length ? 'f' : 'r', filter: 'all' };
+}
+const backHome = () => { busyTitle(); show('home'); $('#check').scrollIntoView(); };
+
 $('#startBtn').addEventListener('click', async () => {
   // 비밀번호·키가 있어야 살펴보기 (문서를 아직 안 넣었으면 그 안내가 먼저 나오도록 건너뜀)
-  const ready = mode === 'paste' ? $('#docText').value.trim().length >= 10 : !!file;
+  const ready = mode === 'paste' ? $('#docText').value.trim().length >= 10 : files.length > 0;
   if (ready && window.SALPIM_AUTH && !(await window.SALPIM_AUTH.require())) return;
   hideErr();
   const seats = C.seats.map((s) => s.id).filter((id) => !off.has(id));
   if (!seats.length) return showErr('살펴볼 자리를 하나 이상 골라주세요.');
+  if (mode === 'file' && files.length > 1) return runBatch(files.slice(), seats);
   let name, doc;
   try {
     if (mode === 'paste') {
@@ -218,60 +276,49 @@ $('#startBtn').addEventListener('click', async () => {
       show('busy'); busy('글을 읽는 중…', 0.5);
       doc = readText(text);
     } else {
-      if (!file) return showErr('살펴볼 파일을 골라주세요.');
-      name = file.name;
-      const ext = (name.split('.').pop() || '').toLowerCase();
-      if (!['pdf', 'hwp', 'hwpx', 'docx', 'txt'].includes(ext)) return showErr('PDF, 한글(HWP·HWPX), 워드(DOCX) 파일을 올려주세요.');
+      if (!files.length) return showErr('살펴볼 파일을 골라주세요.');
+      const f = files[0]; name = f.name;
+      if (!EXTS.includes(extOf(name))) return showErr('PDF, 한글(HWP·HWPX), 워드(DOCX) 파일을 올려주세요.');
       show('busy'); busy('문서를 여는 중…', 0.02);
-      const buf = new Uint8Array(await file.arrayBuffer());
-      if (ext === 'pdf') {
-        const lib = await loadPdfjs();
-        const cMapUrl = new URL('./vendor/cmaps/', import.meta.url).href;
-        doc = await readPdf(buf.slice(), lib, { cMapUrl }, (p, n) => busy(`${n}쪽 중 ${p}쪽을 읽는 중…`, p / n));
-        if (doc.scanned) {
-          busyTitle('이미지로 저장된 PDF예요', '이 PDF는 글자가 아니라 이미지로 저장되어 있어서, 글자로 다시 바꾸면서 살펴보고 있어요. 시간이 조금 걸릴 수 있어요. 글자를 바꾸는 일도 이 컴퓨터 안에서만 해요.');
-          busy('글자 인식 도구를 준비하는 중… (처음 한 번은 1~2분 걸릴 수 있어요)', 0.01);
-          let T;
-          try { T = await loadTesseract(); } catch (e) {
-            busyTitle(); show('home'); $('#check').scrollIntoView();
-            return showErr('이미지 PDF를 글자로 바꾸는 도구를 불러오지 못했어요(인터넷 연결 필요). 한컴·어도비·스캔 앱의 <b>OCR(텍스트 인식)</b>으로 텍스트 PDF를 만든 뒤 다시 올려 주세요.');
-          }
-          ocrCancel = false;
-          const t0 = Date.now();
-          doc = await ocrPdf(buf.slice(), lib, T, { cMapUrl }, (p, n) => {
-            const left = p > 1 ? Math.round((Date.now() - t0) / p * (n - p) / 1000) : null;
-            busy(`${n}쪽 중 ${p}쪽을 글자로 바꿨어요${left != null ? ` · 남은 시간 약 ${left >= 90 ? Math.round(left / 60) + '분' : left + '초'}` : ''}`, p / n);
-          }, () => ocrCancel);
-          busyTitle();
-          if (!doc) { show('home'); $('#check').scrollIntoView(); return; }
-        }
-      } else if (ext === 'hwp') {
-        busy('한글 문서를 읽는 중…', 0.5);
-        try { doc = await readHwp(buf); } catch (e) {
-          console.error(e);
-          show('home'); $('#check').scrollIntoView();
-          return showErr((HWP_MSG[e && e.code] || HWP_MSG.other) + `<br><small style="opacity:.6">살핌 v0.6 · 확인용 정보: ${esc(String((e && (e.code || e.name)) || '') + ' ' + String((e && e.message) || '')).slice(0, 120)}</small>`);
-        }
-      } else if (ext === 'hwpx') { busy('한글 문서를 읽는 중…', 0.5); doc = await readHwpx(buf, window.JSZip); }
-      else if (ext === 'docx') { busy('워드 문서를 읽는 중…', 0.5); doc = await readDocx(buf, window.JSZip); }
-      else { doc = readText(new TextDecoder().decode(buf)); }
+      doc = await readFileDoc(f);
     }
-    if (doc.scanned || !doc.units.length) {
-      show('home'); $('#check').scrollIntoView();
-      return showErr(doc.ocr ? '이미지 PDF를 글자로 바꿔 봤지만 읽을 수 있는 글자가 거의 없었어요. 원본 파일(한글·워드)을 올리거나, OCR로 텍스트 PDF를 만든 뒤 다시 올려 주세요.' : '이 파일에서 글자를 읽지 못했어요. 원본 파일(한글·워드)을 올리거나, 내용을 복사해서 <b>글 붙여넣기</b>를 이용해 주세요.');
-    }
+    if (!doc.units.length) { backHome(); return showErr(NO_TEXT); }
     busy('표현을 살피는 중…', 1);
-    const t0 = performance.now();
-    const r = analyze(doc, C, seats);
-    state = { name, doc, seats, at: new Date(), ms: Math.round(performance.now() - t0), findings: r.findings, readings: r.readings,
-      fDec: {}, rDec: {}, ai: {}, aiRun: 'idle', aiDone: 0, aiTotal: 0, aiErr: '', tab: r.findings.length ? 'f' : 'r', filter: 'all' };
+    state = makeState(name, doc, seats);
+    bagPut(state);
     renderResults(); show('results');
   } catch (err) {
     console.error(err);
-    show('home'); $('#check').scrollIntoView();
-    showErr('파일을 읽는 중에 문제가 생겼어요. 파일이 암호로 잠겨 있거나 손상되었을 수 있어요. 내용을 복사해서 <b>글 붙여넣기</b>로 다시 시도해 주세요.');
+    backHome();
+    if (err.code === 'cancel') return;
+    showErr(err.userMsg || '파일을 읽는 중에 문제가 생겼어요. 파일이 암호로 잠겨 있거나 손상되었을 수 있어요. 내용을 복사해서 <b>글 붙여넣기</b>로 다시 시도해 주세요.');
   }
 });
+
+// ───────── 여러 문서 한 번에 ─────────
+async function runBatch(list, seats) {
+  show('busy'); ocrCancel = false;
+  busyTitle(`문서 ${list.length}개를 살펴보고 있어요`, '하나씩 읽어서 결과를 모음에 담고 있어요. 다 끝나면 시트(엑셀)로 내려받을 수 있어요. 이미지로 저장된 PDF는 시간이 오래 걸려 건너뛰고, 따로 올리도록 알려드려요.');
+  let ok = 0, bad = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (ocrCancel) break;
+    const f = list[i], head = `${list.length}개 중 ${i + 1}번째 · ${f.name}`;
+    const prog = (t, k) => busy(`${head} — ${t}`, (i + Math.min(1, k || 0)) / list.length);
+    prog('여는 중…', 0);
+    try {
+      const doc = await readFileDoc(f, { batch: true, prog });
+      bagPut(makeState(f.name, doc, seats)); ok++;
+    } catch (e) {
+      console.error(f.name, e);
+      bagFail(f.name, e.userMsg ? e.userMsg.replace(/<br>[\s\S]*$/, '').replace(/<[^>]+>/g, '') : '파일을 읽지 못했어요. 암호로 잠겨 있거나 손상되었을 수 있어요.'); bad++;
+    }
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  busyTitle();
+  bagNote = `${ok}개 문서를 모음에 담았어요${bad ? ` · ${bad}개는 읽지 못했어요(아래 표에서 까닭을 볼 수 있어요)` : ''}${ocrCancel ? ' · 중간에 멈췄어요' : ''}.`;
+  setFiles([]); $('#docFile').value = '';
+  renderBag(); show('bag');
+}
 
 // ───────── 결과 ─────────
 const KEEP_REASONS = ['고유명칭(기관·법령·사업명)', '법령·지침을 그대로 인용', '맥락상 문제없음', '대체할 표현이 없음', '기타'];
@@ -330,7 +377,7 @@ async function runAI() {
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  state.aiRun = fail ? 'err' : 'done'; state.aiErr = fail; keepScroll(renderResults);
+  state.aiRun = fail ? 'err' : 'done'; state.aiErr = fail; bagPut(state); keepScroll(renderResults);
   if (fail === 'auth' && window.SALPIM_AUTH) window.SALPIM_AUTH.expire();
 }
 function aiPanel() {
@@ -438,9 +485,10 @@ function renderResults() {
       </div>`}
     </div>
     <div class="dock"><div class="wrap">
-      <p id="dockTxt">${nothing ? '살펴본 결과를 검토 기록으로 남길 수 있어요.' : `살펴본 결과를 검토 기록으로 남길 수 있어요`}</p>
+      <p id="dockTxt">살펴본 결과를 검토 기록으로 남기거나, 전수조사 모음(${bag.size}개 문서)에서 시트로 내려받을 수 있어요.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button type="button" class="ghost" data-act="again">다른 문서 살펴보기</button>
+        <button type="button" class="ghost" data-go="bag">전수조사 모음 ${bag.size} →</button>
         <button type="button" data-act="report">검토 기록 만들기 →</button>
       </div>
     </div></div>`;
@@ -548,6 +596,120 @@ $('#report').addEventListener('click', async (e) => {
   }
 });
 $('#report').addEventListener('input', (e) => { const k = e.target.dataset.rq; if (k && state) { (state.req || (state.req = {}))[k] = e.target.value; } });
+
+// ───────── 전수조사 모음 (여러 문서 결과를 모아 시트로) ─────────
+// 이 브라우저 창의 메모리에만 담아요(어디에도 저장하지 않음). 창을 닫거나 새로 고치면 사라져요.
+const bag = new Map(); // 파일 이름 → { name, st?: state, fail?: 까닭, at }
+let bagNote = '', bagSaved = true;
+function bagPut(st) { bag.set(st.name, { name: st.name, st, at: st.at }); bagSaved = false; homeBag(); }
+function bagFail(name, why) { bag.delete(name); bag.set(name, { name, fail: why, at: new Date() }); bagSaved = false; homeBag(); }
+function homeBag() {
+  const el = $('#bagBar'); if (!el) return;
+  el.hidden = !bag.size;
+  el.innerHTML = bag.size ? `전수조사 모음에 <b>${bag.size}개 문서</b>가 담겨 있어요. <button type="button" class="ulink" data-go="bag">모음 보기 · 시트로 내려받기 →</button>` : '';
+}
+window.addEventListener('beforeunload', (e) => { if (bag.size && !bagSaved) { e.preventDefault(); e.returnValue = ''; } });
+
+const kindOf = (s) => s.doc.kind === '붙여넣은 글' && s.name !== '붙여넣은 글' ? extOf(s.name).toUpperCase() : s.doc.kind;
+const sizeOf = (s) => s.doc.kind === 'PDF' ? s.doc.pages + '쪽' : s.doc.pages + '개 문단';
+const pg = (v) => v && v !== '-' ? ' ' + v : '';
+const seatLab = (id) => (seatById[id] || {}).label || '공통';
+const uniq = (a) => a.filter((v, i) => v && a.indexOf(v) === i);
+function sheetRows() {
+  const rows = [], docs = [];
+  [...bag.values()].forEach((b, bi) => {
+    if (b.fail) { docs.push([bi + 1, b.name, '-', '-', fmt(b.at), '', '', '', '읽지 못함 — ' + b.fail]); return; }
+    const s = b.st, ai = (id) => { const v = s.ai[id]; return v ? AI_LAB[v.v] + (v.why ? ' — ' + v.why : '') + (v.sug ? ' / 제안: ' + v.sug : '') : ''; };
+    const nHits = s.findings.reduce((a, g) => a + g.hits.length, 0);
+    docs.push([bi + 1, s.name, kindOf(s), sizeOf(s), fmt(s.at),
+      s.findings.length ? `${s.findings.length}가지(${nHits}곳)` : '0', s.readings.length, Object.keys(s.ai).length ? '함' : '',
+      (s.doc.ocr ? '이미지 PDF를 글자로 바꿔 읽음' : '완료') + (s.findings.length + s.readings.length ? '' : ' · 살펴볼 표현 없음')]);
+    s.findings.forEach((g, gi) => {
+      const t = g.term, h = g.hits[0], locs = uniq(g.hits.map((x) => x.loc));
+      const showAlt = t.alt && !/^\(/.test(t.alt);
+      const reason = /[.!?다요음]$/.test(t.reason.trim()) ? t.reason.trim() : t.reason.trim() + '.';
+      rows.push([0, s.name, '고쳐 쓰면 좋은 표현', LV[t.lv], seatLab(t.seat), uniq(g.hits.map((x) => x.hit)).join(', '),
+        showAlt ? t.alt : (t.alt || '').replace(/^\(|\)$/g, ''),
+        `${g.hits.length}곳${locs.length ? ' · ' + locs.slice(0, 30).join(', ') + (locs.length > 30 ? ' 외' : '') : ''}`,
+        (h.before + h.hit + h.after).trim(),
+        reason + (t.note ? ' 살펴볼 점: ' + t.note : ''),
+        srcName(t.src) + pg(t.page), ai(`f${gi}_0`), '', '', '']);
+    });
+    s.readings.forEach((r, i) => {
+      rows.push([0, s.name, '함께 읽어볼 문장', '', r.seats.map(seatLab).join(', '), uniq(r.marks || []).join(', '), '',
+        r.loc || '', (r.text ? r.text.before + r.text.hit + r.text.after : r.full).trim(),
+        r.questions.map((q) => q.q).join(' '),
+        uniq(r.questions.map((q) => { const p = C.principles[q.basis]; return p ? `${p.title} — ${p.src}${pg(p.page)}` : ''; })).join(' / '),
+        ai(`r${i}`), '', '', '']);
+    });
+  });
+  rows.forEach((r, i) => (r[0] = i + 1));
+  return { rows, docs };
+}
+async function downloadSheet(btn) {
+  const { rows, docs } = sheetRows();
+  const t = btn.textContent; btn.disabled = true; btn.textContent = '만드는 중…';
+  try {
+    const blob = await buildXlsx([
+      { name: '살핌 결과', rows, cols: [
+        { h: '번호', w: 6, center: true }, { h: '검토 파일', w: 26 }, { h: '구분', w: 13, center: true }, { h: '수준', w: 12, center: true },
+        { h: '자리', w: 14 }, { h: '표현', w: 16 }, { h: '고쳐 쓸 말', w: 16 }, { h: '위치', w: 18 }, { h: '문장', w: 48 },
+        { h: '살핌', w: 44 }, { h: '근거', w: 30 }, { h: '맥락 확인(AI)', w: 26 },
+        { h: '소관부서', w: 16, fill: true }, { h: '반영여부', w: 12, fill: true, list: REFLECT }, { h: '비고', w: 24, fill: true }] },
+      { name: '문서 목록', rows: docs, cols: [
+        { h: '번호', w: 6, center: true }, { h: '검토 파일', w: 36 }, { h: '형식', w: 8, center: true }, { h: '분량', w: 11, center: true },
+        { h: '살핀 일시', w: 18, center: true }, { h: '고쳐 쓰면 좋은 표현', w: 16, center: true }, { h: '함께 읽어볼 문장', w: 14, center: true },
+        { h: '맥락 확인', w: 10, center: true }, { h: '상태', w: 44 }] }
+    ], window.JSZip);
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    const url = URL.createObjectURL(blob), link = document.createElement('a');
+    link.href = url; link.download = `살핌_전수조사_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${bag.size}개문서.xlsx`;
+    document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+    bagSaved = true;
+  } catch (err) { console.error(err); alert('시트 파일을 만들지 못했어요. 다시 눌러 주세요.'); }
+  btn.disabled = false; btn.textContent = t;
+}
+function renderBag() {
+  const list = [...bag.values()];
+  const { rows } = sheetRows();
+  const rowsOf = (b) => b.st ? b.st.findings.length + b.st.readings.length : 0;
+  $('#bag').innerHTML = `
+    <div class="wrap res bag">
+      <div class="res-head">
+        <p class="file">전수조사 모음 · 문서 ${list.length}개 · 시트 ${rows.length}줄</p>
+        <h2>${list.length ? '살펴본 문서를 한 시트로 모았어요' : '모음이 비어 있어요'}</h2>
+        ${bagNote ? `<p class="sub ok-note">${esc(bagNote)}</p>` : ''}
+        <p class="sub">${list.length
+          ? '시트에는 문서마다 찾은 표현과 문장이 한 줄씩 들어가요. <b>소관부서 · 반영여부 · 비고</b> 칸은 비워 두었으니, 전체를 훑어본 뒤 부서를 정해 채워 주세요. 같은 이름의 파일을 다시 살펴보면 새 결과로 바뀌어요.'
+          : '처음 화면에서 문서를 살펴보면 결과가 여기에 쌓여요. 파일을 고를 때 여러 개를 한 번에 골라도 돼요.'}</p>
+        <p class="note">모음은 이 브라우저 창에만 담겨 있어요. 창을 닫거나 새로 고치면 사라지니, 끝나면 시트로 내려받아 주세요.</p>
+      </div>
+      ${list.length ? `<div class="r-acts bag-acts">
+        <button type="button" class="btn" aria-pressed="true" data-bact="xlsx">시트(엑셀 .xlsx)로 내려받기</button>
+        <button type="button" class="btn" data-go="check">문서 더 살펴보기</button>
+        <button type="button" class="btn" data-bact="clear">모음 비우기</button>
+      </div>
+      <table class="rq bag-t"><thead><tr><th>번호</th><th>검토 파일</th><th>고쳐 쓰면 좋은 표현</th><th>함께 읽어볼 문장</th><th>맥락 확인</th><th></th></tr></thead><tbody>
+        ${list.map((b, i) => b.fail
+          ? `<tr class="fail"><td>${i + 1}</td><td><b>${esc(b.name)}</b><br><span class="mut">읽지 못함 · ${esc(b.fail)}</span></td><td>-</td><td>-</td><td>-</td><td><button type="button" class="rep-mini" data-bdel="${i}">빼기</button></td></tr>`
+          : `<tr><td>${i + 1}</td><td><b>${esc(b.name)}</b><br><span class="mut">${esc(kindOf(b.st))} · ${sizeOf(b.st)}</span></td>
+             <td>${b.st.findings.length ? `${b.st.findings.length}가지 (${b.st.findings.reduce((a, g) => a + g.hits.length, 0)}곳)` : '0'}</td><td>${b.st.readings.length}</td>
+             <td>${Object.keys(b.st.ai).length ? '함' : '-'}</td>
+             <td style="white-space:nowrap">${rowsOf(b) ? `<button type="button" class="rep-mini" data-bopen="${i}">결과 보기</button> ` : ''}<button type="button" class="rep-mini" data-bdel="${i}">빼기</button></td></tr>`).join('')}
+      </tbody></table>` : `<div class="r-acts bag-acts"><button type="button" class="btn" data-go="check">문서 살펴보러 가기</button></div>`}
+    </div>`;
+}
+$('#bag').addEventListener('click', (e) => {
+  const list = [...bag.values()];
+  const a = e.target.closest('[data-bact]');
+  if (a && a.dataset.bact === 'xlsx') return downloadSheet(a);
+  if (a && a.dataset.bact === 'clear') { if (confirm(`모음에 담긴 ${bag.size}개 문서를 모두 지울까요?${bagSaved ? '' : ' 아직 시트로 내려받지 않았어요.'}`)) { bag.clear(); bagSaved = true; bagNote = ''; homeBag(); renderBag(); } return; }
+  const o = e.target.closest('[data-bopen]');
+  if (o) { const b = list[+o.dataset.bopen]; if (b && b.st) { state = b.st; renderResults(); show('results'); } return; }
+  const d = e.target.closest('[data-bdel]');
+  if (d) { const b = list[+d.dataset.bdel]; if (b) { bag.delete(b.name); bagNote = ''; homeBag(); renderBag(); } }
+});
+homeBag();
 
 // ───────── 살피는 기준 ─────────
 let stdDone = false;
